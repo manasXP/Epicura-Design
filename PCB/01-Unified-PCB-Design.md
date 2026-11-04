@@ -1,7 +1,7 @@
 ---
 created: 2026-03-06
 modified: 2026-11-04
-version: 3.1
+version: 4.1
 status: Draft
 ---
 
@@ -9,56 +9,75 @@ status: Draft
 
 ## 1. Overview
 
-This document covers the single custom PCB for Epicura. One 160 x 90 mm, 4-layer board carries everything electrical except the induction surface, the stirring motor and the AC power supply:
+Epicura is physically three units: the **Cooking Surface (CS)** with the electric heating unit, PSU, safety relay, E-stop and fans; the **Stirring Unit (SU)** on the gantry between the CS rear pillars; and the **Dispensing Unit (DU)** that sits on top, lifts straight off with no cable, and carries the brain of the machine. This document covers the **Unified PCB v4.0, the DU board**. The CS has its own board, the **Cooking Surface Controller (CSC, STM32G0B1RE)**, documented in [[02-Cooking-Surface-Controller|Cooking Surface Controller]]. The only cable between units is the CS → SU harness; the DU meets the CS through an 8-pad magnetic pogo dock (J_DOCK).
 
-- **STM32G474RE** real-time controller (dispensers, safety, both CAN ports, LED ring, sensors)
-- **Application-processor slot (J_AP)** for the Luckfox Pico Zero (RV1106G3): 5 V power, SPI0/I2C3 break-out to the display, UART service link, BOOT0/NRST control, and the RV1106's own CAN node (MCP2518FD) on the isolated bus
-- **CID + FID drivers**: the Dispenser Servo Block (PCA9685, switched 6.5 V rail, J_DSB1-4)
-- **SLD drivers**: TB6612FNG peristaltic pump driver, two solenoid MOSFETs, two HX711 load-cell channels (J_SLD)
-- **Two CAN ports**: an **isolated** port to the cooking surface (J_CAN_HEAT, ISO1050DUB x2 in one isolated 5 V domain) and a **regular** non-isolated port to the stirring motor (J_CAN_STIR, SN65HVD230 on FDCAN2)
-- **2-cell Li-ion backup** with on-board charger (TP5100) and automatic switch-over of the 5 V logic domain
-- Power conversion (24 V in; 12 V, 6.5 V, 5 V, 3.3 V rails), exhaust fans, buzzer, LED ring, safety relay, E-stop, USB-C programming port
+One 160 x 90 mm, 4-layer board carries everything electrical in the DU:
 
-There is no IR thermometer on the board or in the system: the cooking surface runs its own temperature loop and reports its measured temperature on the isolated CAN bus (see [[../05-Subsystems/01-Induction-Heating|Induction Heating]]).
+- **Application-processor slot (J_AP)** for the Luckfox Pico Zero (RV1106G3): 5 V power, SPI0/I2C3 break-out to the display, I2C3 to every on-board peripheral, four PWM and three GPIO, and the RV1106's own CAN node (MCP2518FD + ISO1050DUB #2) on the isolated bus that reaches the CS through the dock
+- **CID + FID drivers**: the Dispenser Servo Block (PCA9685 on I2C3, switched 6.0 V rail, J_DSB1-4)
+- **SLD drivers**: TB6612FNG for two 6 V peristaltic pumps, two 6 V solenoid MOSFETs, two NAU7802 24-bit load-cell ADCs behind a TCA9543A I2C mux (J_SLD)
+- **Dock (J_DOCK)**: 8 flat gold pads on the underside — DOCK_24V charge input, isolated CAN_H/CAN_L with GND_ISO and 5V_ISO, two dock-sense lines
+- **2-cell Li-ion pack as the primary supply** with on-board 1 A charger (TP5100 from DOCK_24V) and a passive VSYS diode-OR, so the DU runs docked from the CS and lifted (or through a mains outage) from its pack
+- Power conversion (VSYS → 5 V, 3.3 V and 6.0 V; DOCK_24V → 12 V for the charger only), white LED ring, buzzer, battery/dock monitoring (INA219 x2)
 
-### 1.1 Single-Board Architecture
+There is no MCU on this board any more: the STM32, the safety relay, E-stop, pot reed, exhaust fans, the regular (stirring-motor) CAN port, the isolated DC-DC and the USB-C/SWD programming ports all live on the CSC in the CS base. There is no IR thermometer on the board or in the system: the cooking surface runs its own temperature loop and reports its measured temperature on the isolated CAN bus (see [[../05-Subsystems/01-Electric-Heating|Electric Heating]]).
+
+### 1.1 Board Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  Unified PCB (160 x 90 mm, 4-layer)                                       │
+│  Unified PCB v4.0 — Dispensing Unit (160 x 90 mm, 4-layer)               │
 │                                                                          │
 │   ┌──────────────────────────┐   ┌───────────────┐   ┌────────────────┐  │
-│   │ J_AP: Luckfox Pico Zero  │   │ STM32G474RE   │   │ 2S Li-ion      │  │
-│   │ slot (2x20 socket +      │   │ FreeRTOS      │   │ TP5100 charger │  │
-│   │ 4 standoffs)             │   │               │   │ J_BAT          │  │
-│   └──────┬───────────────────┘   └──┬──────┬─────┘   └────────────────┘  │
-│          │ SPI0 CS1 (MCP2518FD)     │FDCAN1│FDCAN2                        │
-│          ▼                          ▼      ▼                             │
-│   ┌──────────────────────────────┐  ┌──────────────┐                     │
-│   │ Isolated CAN domain          │  │ SN65HVD230   │──► J_CAN_STIR       │
-│   │ ISO1050 #1 (STM32)           │  │ (regular CAN)│    stirring motor   │
-│   │ ISO1050 #2 (RV1106 MCP2518FD)│  └──────────────┘                     │
-│   │ B0505S 5V_ISO ──► J_CAN_HEAT │──► cooking surface                    │
-│   └──────────────────────────────┘                                       │
+│   │ J_AP: Luckfox Pico Zero  │   │ 2S Li-ion     │   │ J_DOCK (8 pads)│  │
+│   │ slot (2x20 socket +      │   │ TP5100 1 A    │   │ DOCK_24V, GND  │  │
+│   │ 4 standoffs)             │   │ J_BAT, INA219 │   │ CAN_H/L, GND_ISO│ │
+│   └──┬────────┬──────────────┘   └───────┬───────┘   │ 5V_ISO, SENSE  │  │
+│      │SPI0 CS1│I2C3 / GPIO / PWM         │BAT+       └───┬────────┬───┘  │
+│      ▼        │                          ▼               │CAN     │24 V  │
+│   ┌──────────────────────────────┐   VSYS = DOCK_24V ⊕ BAT+ ◄──────┘      │
+│   │ MCP2518FD ──► ISO1050 #2 ────┼──► isolated island ◄──┘ (5V_ISO)       │
+│   │ (RV1106 CAN node)            │                                        │
+│   └──────────────────────────────┘                                        │
 │                                                                          │
-│   DSB: PCA9685 + 6.5 V rail ──► J_DSB1-4 (FID x3, CID x1 servos)         │
-│   SLD: TB6612FNG + 2 MOSFET + 2 HX711 ──► J_SLD                           │
-│   Fans, buzzer, LED ring, relay, E-stop, USB-C, SWD, J_LCD break-out      │
+│   DSB: PCA9685 (I2C3) + 6.0 V rail ──► J_DSB1-4 (FID x3, CID x1 servos)   │
+│   SLD: TB6612FNG + 2 MOSFET + TCA9543A/2x NAU7802 ──► J_SLD               │
+│   White LED ring (Q_LED, PWM), buzzer (PWM), J_LCD break-out              │
 └──────────────────────────────────────────────────────────────────────────┘
-          ▲ 24 V DC (Mean Well LRS-75-24)            ▲ battery pack (2S1P)
+          ▲ dock pads (CS left pillar)                ▲ battery pack (2S1P)
 ```
 
 ### 1.2 Scope
 
 | Item | Status | Notes |
 |------|--------|-------|
-| **Unified PCB** (this document) | Custom design required | STM32G474RE + AP slot + power + dispenser drivers + two CAN ports + battery backup; 160 x 90 mm, 4-layer |
+| **Unified PCB v4.0** (this document) | Custom design required | DU board: AP slot + battery-first power + dispenser drivers + RV1106 CAN node + dock pads; 160 x 90 mm, 4-layer |
+| **Cooking Surface Controller (CSC)** | Custom design required — see [[02-Cooking-Surface-Controller\|Cooking Surface Controller]] | STM32G0B1RE, both CAN transceivers for the CS side, relay, E-stop, fans, dock power switch; in the CS base |
 | **Luckfox Pico Zero** | Off-the-shelf module | Plugs into J_AP; camera on its own CSI FPC; display routed through the PCB to J_LCD |
-| **Microwave induction surface** | Commercial module with CAN port and internal temperature control (see [[../05-Subsystems/01-Induction-Heating\|Induction Heating]]) | Isolated CAN port J_CAN_HEAT |
-| **Stirring motor** | 24 V integrated BLDC servo with CAN interface (see [[../05-Subsystems/02-Robotic-Arm\|Robotic Arm]]) | Regular CAN port J_CAN_STIR + 24 V on J_STIR_PWR |
-| **Battery pack** | 2S1P Li-ion 18650 pack with protection module (PCM) | Charged and monitored on the PCB; connects to J_BAT |
+| **Dock pogo block** | Off-the-shelf 8-contact magnetic pogo pair (2.54 mm pitch) | Spring pins in the CS left pillar, flat pads on this board (J_DOCK) |
+| **Electric heating unit** | Commercial rice-cooker-class heating unit (resistive plate, own PID, CAN port; 1,300 W assumed) (see [[../05-Subsystems/01-Electric-Heating\|Electric Heating]]) | On the same isolated bus, reached through the dock and the CSC's J_CAN_HEAT |
+| **Stirring motor** | 24 V integrated BLDC servo with CAN interface (see [[../05-Subsystems/02-Robotic-Arm\|Robotic Arm]]) | Not connected to this board: regular CAN port and 24 V on the CSC (J_SU harness) |
+| **Battery pack** | 2S1P Li-ion 18650 pack with protection module (PCM) | Primary supply of the DU; charged and monitored on the PCB; connects to J_BAT |
 
-### 1.3 Changes from v2.x
+### 1.3 Changes from v3.x
+
+| Area | v3.x (single board) | v4.0 (DU board) |
+|------|---------------------|-----------------|
+| Physical architecture | One board for the whole machine, 24 V cable from the PSU | Three units; this board lives in the lift-off DU and meets the CS through an 8-pad pogo dock (J_DOCK). The STM32 moves to the new CSC in the CS base |
+| MCU | STM32G0B1RE on this board (dispense, safety, both CAN ports) | None. Dispensing, load cells, LED ring and buzzer are driven by the RV1106 directly over I2C3 / GPIO / PWM (`epicurad` `dispense` thread) |
+| CAN | Two ports on this board: isolated (ISO1050 x2 + B0505S, J_CAN_HEAT) and regular (SN65HVD230, J_CAN_STIR) | One node: MCP2518FD + ISO1050DUB #2, bus side powered from the dock's 5V_ISO; CAN_H/CAN_L on dock pads 3–4. No termination, no isolated DC-DC, no regular port on this board |
+| Power input | J_24V_IN (XT30) from the LRS-75-24; 24 V feeds 12 V, 6.5 V and VSYS | DOCK_24V on dock pad 1 (switched on the CSC, 2 A); feeds only the charger (via 12 V) and VSYS. The battery is the primary supply: VSYS = DOCK_24V ⊕ BAT+ |
+| Battery | Backup for the logic domain, 0.5 A charge, voltage on an STM32 ADC divider | Primary supply for everything on the board, 1.0 A charge (R_CS 0.1 Ω), pack voltage + current on INA219 #2 (0x44) |
+| Dispenser rail | 6.5 V from 24 V; D_DSB4 drop for the MG90S | 6.0 V (6V_DSP) from VSYS; all four servos, the pumps and the solenoids run on it; D_DSB4 removed |
+| SLD | 12 V pumps and solenoids; 2x HX711 bit-banged by the STM32 | 6 V pumps (TB6612 VM = 6V_DSP) and 6 V NC solenoids; 2x NAU7802 on I2C3 behind a TCA9543A mux |
+| Load/current monitor | INA219 on the 24 V input | INA219 #1 on 6V_DSP (0x40, DSB stall window), INA219 #2 on BAT+ (0x44) |
+| LED ring | WS2812B, STM32 TIM15 + DMA, 74AHCT1G125, 3-pin J_LED | White ring, Q_LED low-side on an RV1106 PWM, 2-pin J_LED |
+| Buzzer | STM32 TIM8 | RV1106 PWM via 2N7002 |
+| Power-fail detect | 24 V divider on STM32 COMP1 | DOCK_PWR_OK (divider + 2N7002) and DOCK_SENSE_A on RV1106 GPIO |
+| Moved to the CSC | — | Safety relay (Q_RLY), E-stop, pot reed (J_SAFE), exhaust fans (J_FAN), Q_STIR / J_STIR_PWR, J_CAN_STIR, J_CAN_HEAT, ISO1050 #1, B0505S, SN65HVD230, J_SWD, J_USB, service UART |
+| Connectors | 19 | 11 (J_AP, J_LCD, J_DOCK, J_BAT, J_DSB1–4, J_SLD, J_LED, J_BUZZER) |
+
+#### Changes from v2.x (v3.0, history)
 
 | Area | v2.x (CM5 era) | v3.0 |
 |------|----------------|------|
@@ -72,305 +91,203 @@ There is no IR thermometer on the board or in the system: the cooking surface ru
 
 ### 1.4 Area Analysis
 
-Roughly 95 ICs/discretes and 19 connectors occupy about 3,600 mm² of the ~12,000 mm² usable placement area (~30 % utilisation). The Pico Zero footprint (65 x 30 mm) sits over the digital zone on standoffs; the area under it is used for passives on the bottom side. No board size increase is needed.
+Roughly 70 ICs/discretes and 11 connectors occupy about 2,700 mm² of the ~12,000 mm² usable placement area (~23 % utilisation). The Pico Zero footprint (65 x 30 mm) sits over the digital zone on standoffs; the area under it is used for passives on the bottom side. The outline stays 160 x 90 mm so the DU enclosure, the camera position (centred over the pot) and the carousel chutes around the board are unchanged; the free area goes to the dock-pad edge and a wider isolation island.
 
 ---
 
 ## 2. Board-Level Block Diagram
 
 ```
-24V DC Input ─── F1 (5A) ─── SS54 ─── SMBJ24A ─── 24V Internal Rail ──┬──► INA219 shunt ──► 24V_MON
-                                                                      │
-          ┌───────────────────────┬──────────────────────┬────────────┼─────────────────────┐
-          ▼                       ▼                      ▼            ▼                     ▼
-  ┌──────────────┐        ┌──────────────┐      ┌─────────────┐  Voltage div.   ┌──────────────────┐
-  │ MP1584EN #1  │        │ MP1584EN #2  │      │ Q_STIR      │  100k/10k       │ D_SYS1 (SS54)    │
-  │ 24V → 12V 3A │        │ 24V → 6.5V 3A│      │ P-MOSFET    │     │           │ 24V ──► VSYS     │
-  └──────┬───────┘        └──────┬───────┘      │ 24V_STIR    │     ▼           └────────┬─────────┘
-         │                       │              └──────┬──────┘  PA1 (COMP1)              │
-     12V Rail             6.5V DSB rail                │        Power Fail        VSYS ◄──┴── D_SYS2 (SS54) ◄── BAT+
-         │                (switched by               J_STIR_PWR                     │
-   ┌─────┼────────┐        PCF8574 #2 P4)                                           ▼
-   ▼     ▼        ▼              │                                           ┌──────────────┐
- Fans  SLD pumps  TP5100         ▼                                           │ TPS54531     │
- 2x    TB6612 +   2S charger   PCA9685 ──► J_DSB1-4                          │ VSYS → 5V 5A │
-       2 solenoid  │                                                         └──────┬───────┘
-                   ▼                                                                │
-               J_BAT (2S1P pack, 6.0–8.4 V, PCM) ──────────────────────────► BAT+   5V_MAIN ──┬──► J_AP pins 2/4 (Pico Zero)
-                                                                                              ├──► J_LCD VCC, LED ring (switched)
-USB-C VBUS ─── F_USB (500mA) ─── 5V_USB ── D_OR2 ──┐                                          ├──► B0505S ──► 5V_ISO (CAN domain)
-                                                    ├── 5V_MERGED ──► AMS1117-3.3 ──► 3.3V    │
-                                   5V_MAIN ── D_OR1 ┘                                          └──► Buzzer
+J_DOCK 1 DOCK_24V ─── SMBJ24A ─── 10 µF ──┬──────────────────────────────┬──► R_DIV 100k/10k ──► 2N7002 ──► DOCK_PWR_OK (RV1106 GPIO, active-low)
+(switched on the CSC, F_DOCK 2 A)         │                              │
+                                          ▼                              ▼
+                                  ┌──────────────┐               ┌──────────────────┐
+                                  │ MP1584EN #1  │               │ D_SYS1 (SS54)    │
+                                  │ 24V → 12V    │               │ DOCK_24V ──► VSYS│
+                                  └──────┬───────┘               └────────┬─────────┘
+                                         │ 12V (charger only)             │
+                                         ▼                        VSYS ◄──┴── D_SYS2 (SS54) ◄── BAT+ ◄── R_SH2 (10 mΩ, INA219 #2 0x44) ◄── J_BAT (2S1P, 6.0–8.4 V, PCM)
+                                  ┌──────────────┐                 │                                ▲
+                                  │ TP5100 1.0 A │ ──► BAT+ ───────┼────────────────────────────────┘
+                                  │ (R_CS 0.1 Ω) │                 │
+                                  └──────────────┘                 ├──────────────────────────┐
+                                                                   ▼                          ▼
+                                                           ┌──────────────┐           ┌──────────────┐
+                                                           │ TPS54531     │           │ MP1584EN #2  │
+                                                           │ VSYS → 5V 5A │           │ VSYS → 6.0 V │
+                                                           └──────┬───────┘           └──────┬───────┘
+                                                                  │                          │ Q_DSB (PCF8574 #2 P4) ── 3 A PTC ── 1000 µF
+                                   5V_MAIN ◄──────────────────────┘                          ▼
+                                      ├──► J_AP pins 2/4 (Pico Zero)                   6V_DSP (switched) ──► R_SH1 (10 mΩ, INA219 #1 0x40)
+                                      ├──► J_LCD VCC                                     ├──► PCA9685 CH0-3 ──► J_DSB1-4 (DS3218, 2x MG996R, MG90S)
+                                      ├──► J_LED pin 1 (white ring, Q_LED low-side)      ├──► TB6612 VM ──► J_SLD pumps (6 V peristaltic x2)
+                                      ├──► J_BUZZER pin 1                                └──► J_SLD solenoids (6 V NC x2, IRLML6344 low-side)
+                                      └──► AMS1117-3.3 ──► 3.3V: PCA9685, PCF8574 #2, INA219 x2, TCA9543A, NAU7802 x2,
+                                                                 MCP2518FD, ISO1050 #2 VCC1, TB6612 VCC
+
+J_DOCK 6 5V_ISO / 5 GND_ISO ──► ISO1050DUB #2 VCC2 (bus side; generated on the CSC, F_CAN 100 mA)
+J_DOCK 3 CAN_H / 4 CAN_L ──────► ISO1050DUB #2 bus pins (PESD1CAN) ◄── MCP2518FD ◄── J_AP SPI0 CS1 + nINT
+J_DOCK 7 DOCK_SENSE_A ─── 10k pull-up to 3.3 V ──► RV1106 GPIO (low = docked)
+J_DOCK 8 DOCK_SENSE_B ─── tied to GND on this board (tells the CSC the DU is present)
 
                      ┌────────────────────────────────────────────────────────────────┐
-                     │  STM32G474RE (LQFP-64)                                         │
-                     │  FDCAN1 (PB8/PB9) ──► ISO1050DUB #1 ─┐ isolated domain         │
-   J_AP SPI0 CS1 ───►│  MCP2518FD (RV1106 node) ──► ISO1050DUB #2 ─┴─► J_CAN_HEAT     │
-                     │  FDCAN2 (PB12/PB13) ──► SN65HVD230 ──► J_CAN_STIR               │
-                     │  USART2 (PA2/PA3) ◄──► J_AP UART2 (service link)                │
-                     │  I2C1 (PA15/PB7) ──► PCA9685 (0x41), PCF8574 #2 (0x21), INA219 │
-                     │  TIM15 (PB14) ──► 74AHCT1G125 ──► J_LED (WS2812B)               │
-                     │  TIM3/TIM2 ──► fans; TIM8 ──► buzzer; GPIO ──► TB6612, relay    │
-                     │  ADC: PC0 VBUS detect, PC1 battery voltage                     │
-                     │  USB (PA11/PA12) ──► J_USB                                      │
+                     │  RV1106 (Luckfox Pico Zero in J_AP)                            │
+                     │  SPI0 CS0 ──► J_LCD (ST7796S); SPI0 CS1 ──► MCP2518FD          │
+                     │  I2C3 ──► FT6336 (0x38), PCF8574 #2 (0x21), PCA9685 (0x41),    │
+                     │           INA219 #1 (0x40), INA219 #2 (0x44),                  │
+                     │           TCA9543A (0x71) ──► NAU7802 oil / water (0x2A each)   │
+                     │  GPIO ──► PCA9685 OE; GPIO ◄── DOCK_SENSE_A, DOCK_PWR_OK       │
+                     │  PWM x4 ──► TB6612 PWMA/PWMB, Q_LED (ring), buzzer             │
+                     │  PCF8574 #2 ──► solenoids, status LED, TB6612 AIN1/BIN1,       │
+                     │                 Q_DSB; ◄── TP5100 CHRG/STDBY                   │
                      └────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. STM32G474RE Pin Allocation
+## 3. RV1106 Interface
 
-### 3.1 Pin Map (LQFP-64)
+With the STM32 gone, the Luckfox Pico Zero in J_AP is the only controller on the board. Everything it drives is reached through four header resources: SPI0 (LCD + CAN controller, unchanged), **I2C3** (the single I2C bus of the DU), **three GPIO** and **four PWM**. Pin numbers for the new GPIO and PWM lines are fixed at layout (§5.2); the header pins freed by the STM32's departure (8, 10, 32, 38) are the first candidates.
 
-```
-STM32G474RE (LQFP-64) — Unified PCB v3 Pin Assignment
-┌────────────────────────────────────────────────────────────────┐
-│                                                                │
-│  ┌─── FDCAN1: Isolated bus to the cooking surface ─────────┐   │
-│  │  PB8  (FDCAN1_RX, AF9) ◄── ISO1050DUB #1 RXD               │
-│  │  PB9  (FDCAN1_TX, AF9) ──► ISO1050DUB #1 TXD               │
-│  │  500 kbps classic CAN; nodes: STM32, RV1106 (MCP2518FD),  │
-│  │  induction surface MCU                                    │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── FDCAN2: Regular bus to the stirring motor ────────────┐  │
-│  │  PB12 (FDCAN2_RX, AF9) ◄── SN65HVD230 R                   │
-│  │  PB13 (FDCAN2_TX, AF9) ──► SN65HVD230 D                   │
-│  │  1 Mbps classic CAN (motor protocol), non-isolated        │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── USART2: Service link to the RV1106 ───────────────────┐  │
-│  │  PA2  (USART2_TX) ──► J_AP pin 10 (UART2_RX)              │
-│  │  PA3  (USART2_RX) ◄── J_AP pin 8  (UART2_TX)              │
-│  │  BOOT0 ◄── J_AP GPIO 32 (via 1k) ; NRST ◄── J_AP GPIO 38  │
-│  │  ST system bootloader + debug console only                │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── I2C1: On-board peripherals ───────────────────────────┐  │
-│  │  PA15 (I2C1_SCL, AF4) ──► PCA9685 (0x41) DSB servo PWM    │
-│  │  PB7  (I2C1_SDA, AF4) ◄─► PCF8574 #2 (0x21) GPIO expander │
-│  │                        ◄─► INA219 (0x40) 24 V monitor     │
-│  │  100 kHz, 4.7k pull-ups to 3.3V, 3 devices                │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── DSB: Dispenser Servo Block (FID + CID) ───────────────┐  │
-│  │  PB4  (GPIO)      ──► PCA9685 OE (active-low; high = off) │
-│  │  PCF8574 #2 P4    ──► 6.5 V DSB rail enable (Q_DSB)       │
-│  │  PCA9685 CH0..CH3 ──► J_DSB1..4 (C1, F1, F2, F3)           │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── SLD: Standard Liquid Dispenser ───────────────────────┐  │
-│  │  PC3  (GPIO)      ──► SLD-OIL Pump PWM (TB6612 PWMA)      │
-│  │  PC4  (GPIO)      ──► SLD-OIL Pump DIR (TB6612 AIN1)      │
-│  │  PC5  (GPIO)      ──► SLD-WATER Pump PWM (TB6612 PWMB)    │
-│  │  PC6  (GPIO)      ──► SLD-WATER Pump DIR (TB6612 BIN1)    │
-│  │  PCF8574 #2 P0    ──► SLD-OIL Solenoid (IRLML6344)        │
-│  │  PCF8574 #2 P1    ──► SLD-WATER Solenoid (IRLML6344)      │
-│  │  PC11 / PC12      ──► / ◄── HX711 SCK / DOUT (oil)        │
-│  │  PC9  / PC10      ──► / ◄── HX711 SCK / DOUT (water)      │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── Exhaust Fans (2x 120mm) ──────────────────────────────┐  │
-│  │  PA6  (TIM3_CH1)  ──► Fan 1 PWM (25 kHz)                  │
-│  │  PB10 (TIM2_CH3)  ──► Fan 2 PWM (25 kHz)                  │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── LED Ring (WS2812B) ───────────────────────────────────┐  │
-│  │  PB14 (TIM15_CH1 + DMA) ──► 74AHCT1G125 ──► J_LED DATA    │
-│  │  PCF8574 #2 P3    ──► ring 5 V switch (Q_LED_N/Q_LED_P)   │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── Audio ────────────────────────────────────────────────┐  │
-│  │  PC7  (TIM8_CH2)  ──► Piezo Buzzer PWM (via 2N7002)       │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── USB: Native USB 2.0 Full-Speed ───────────────────────┐  │
-│  │  PA11 (USB_DM) ◄─► 22R ── USBLC6-2SC6 ── J_USB D-         │
-│  │  PA12 (USB_DP) ◄─► 22R ── USBLC6-2SC6 ── J_USB D+         │
-│  │  PC0  (ADC)    ◄── VBUS detect (100k/100k divider)        │
-│  │  BOOT0 ── SW_BOOT (tactile to 3.3V) + 10k pull-down       │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── Power Monitoring ─────────────────────────────────────┐  │
-│  │  PA1  (COMP1_INP) ◄── 24V divider 100k/10k (power fail)   │
-│  │  PC1  (ADC1_IN7)  ◄── BAT+ divider 100k/22k (pack volts)  │
-│  │  PCF8574 #2 P6/P7 ◄── TP5100 CHRG / STDBY (open-drain)    │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── Stirring motor power ─────────────────────────────────┐  │
-│  │  PCF8574 #2 P5    ──► Q_STIR (24 V_STIR high-side switch) │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  ┌─── GPIO: Safety & Control ───────────────────────────────┐  │
-│  │  PB0  (GPIO)      ──► Safety Relay (via Q_RLY 2N7002)     │
-│  │  PB1  (GPIO)      ◄── Pot Detection (reed switch, backup) │
-│  │  PB2  (GPIO/EXTI) ◄── E-Stop Button (NC, active-low)      │
-│  │  PCF8574 #2 P2    ──► Status LED                          │
-│  └───────────────────────────────────────────────────────────┘
-│                                                                │
-│  Debug: SWD via PA13 (SWDIO) / PA14 (SWCLK), J_SWD             │
-│  Clock: 8 MHz HSE (PF0, PF1); 32.768 kHz LSE (PC14, PC15)      │
-│  Reset: NRST with 100nF + SW_RST; also driven by J_AP GPIO 38  │
-│  Free: PA0, PA4, PA5, PA7, PA8, PA9, PA10, PB3, PB5, PB6,      │
-│        PB11, PB15, PC2, PC8, PC13, PD2 (16 pins)               │
-└────────────────────────────────────────────────────────────────┘
-```
+### 3.1 I2C3 — Single Peripheral Bus (J_AP 16/18, 400 kHz)
 
-### 3.2 Pin Summary Table
+| Address | Device | Function | Linux driver |
+|---------|--------|----------|--------------|
+| 0x21 | PCF8574 #2 | 8-bit GPIO expander (§3.4) | `gpio-pcf857x` |
+| 0x2A | NAU7802 (oil) | 24-bit load-cell ADC, TCA9543A channel 0 | `nau7802` (IIO) |
+| 0x2A | NAU7802 (water) | 24-bit load-cell ADC, TCA9543A channel 1 | `nau7802` (IIO) |
+| 0x38 | FT6336 | Capacitive touch controller on the 4" display, via J_LCD (unchanged) | `edt-ft5x06` |
+| 0x40 | INA219 #1 | 6V_DSP rail voltage / current (DSB stall window) | `ina2xx` (hwmon) |
+| 0x41 | PCA9685 | 16-channel servo PWM (DSB) | `pwm-pca9685` |
+| 0x44 | INA219 #2 | BAT+ voltage / current (state of charge) | `ina2xx` (hwmon) |
+| 0x71 | TCA9543A | 2-channel I2C mux in front of the two NAU7802 (same fixed address) | `i2c-mux-pca954x` |
 
-| Pin | Function | Peripheral | Direction | Destination | Subsystem |
-|-----|----------|------------|-----------|-------------|-----------|
-| PA0 | — | Available | — | — | — |
-| PA1 | COMP1_INP | 24V Power Fail Detection | Input | 100k/10k divider | Power |
-| PA2 | USART2_TX | Service link | Output | J_AP pin 10 (RV1106 UART2_RX) | Comms |
-| PA3 | USART2_RX | Service link | Input | J_AP pin 8 (RV1106 UART2_TX) | Comms |
-| PA4 | — | Available (was BLDC EN) | — | — | — |
-| PA5 | — | Available (was BLDC DIR) | — | — | — |
-| PA6 | TIM3_CH1 | Exhaust Fan 1 PWM | Output | IRLML6344 gate → J_FAN | Exhaust |
-| PA7 | — | Available | — | — | — |
-| PA8 | — | Available (was BLDC PWM) | — | — | — |
-| PA9 | — | Available | — | — | — |
-| PA10 | — | Available | — | — | — |
-| PA11 | USB_DM | USB D- | Bidir | USBLC6-2SC6 → 22R → J_USB | USB |
-| PA12 | USB_DP | USB D+ | Bidir | USBLC6-2SC6 → 22R → J_USB | USB |
-| PA13 | SWDIO | SWD Debug | Bidir | J_SWD | Debug |
-| PA14 | SWCLK | SWD Debug | Input | J_SWD | Debug |
-| PA15 | I2C1_SCL | PCA9685 / PCF8574 #2 / INA219 | Output | On-board ICs | I2C |
-| PB0 | GPIO | Safety Relay | Output | Q_RLY (2N7002) → J_SAFE | Safety |
-| PB1 | GPIO | Pot Detection (backup) | Input | Reed switch (10k pull-up) → J_SAFE | Safety |
-| PB2 | GPIO (EXTI) | E-Stop | Input | NC button (10k pull-up, RC debounce) → J_SAFE | Safety |
-| PB3 | — | Available | — | — | — |
-| PB4 | GPIO | PCA9685 OE | Output | PCA9685 OE (10k pull-up = off) | DSB |
-| PB5 | — | Available | — | — | — |
-| PB6 | — | Available | — | — | — |
-| PB7 | I2C1_SDA | PCA9685 / PCF8574 #2 / INA219 | Bidir | On-board ICs | I2C |
-| PB8 | FDCAN1_RX | Isolated CAN RX | Input | ISO1050DUB #1 RXD | CAN (heater) |
-| PB9 | FDCAN1_TX | Isolated CAN TX | Output | ISO1050DUB #1 TXD | CAN (heater) |
-| PB10 | TIM2_CH3 | Exhaust Fan 2 PWM | Output | IRLML6344 gate → J_FAN | Exhaust |
-| PB11 | — | Available | — | — | — |
-| PB12 | FDCAN2_RX | Regular CAN RX | Input | SN65HVD230 R | CAN (stir) |
-| PB13 | FDCAN2_TX | Regular CAN TX | Output | SN65HVD230 D | CAN (stir) |
-| PB14 | TIM15_CH1 | WS2812B data (PWM + DMA) | Output | 74AHCT1G125 → J_LED | LED ring |
-| PB15 | — | Available | — | — | — |
-| PC0 | ADC1_IN6 | USB VBUS Detect | Input | 100k/100k divider from 5V_USB | USB |
-| PC1 | ADC1_IN7 | Battery pack voltage | Input | 100k/22k divider from BAT+ | Battery |
-| PC2 | — | Available | — | — | — |
-| PC3 | GPIO | SLD Pump 1 PWM | Output | TB6612 PWMA | SLD |
-| PC4 | GPIO | SLD Pump 1 DIR | Output | TB6612 AIN1 | SLD |
-| PC5 | GPIO | SLD Pump 2 PWM | Output | TB6612 PWMB | SLD |
-| PC6 | GPIO | SLD Pump 2 DIR | Output | TB6612 BIN1 | SLD |
-| PC7 | TIM8_CH2 | Buzzer PWM | Output | 2N7002 gate → J_BUZZER | Audio |
-| PC8 | — | Available | — | — | — |
-| PC9 | GPIO | HX711 SCK (SLD water) | Output | J_SLD pin 15 | SLD |
-| PC10 | GPIO | HX711 DOUT (SLD water) | Input | J_SLD pin 16 | SLD |
-| PC11 | GPIO | HX711 SCK (SLD oil) | Output | J_SLD pin 13 | SLD |
-| PC12 | GPIO | HX711 DOUT (SLD oil) | Input | J_SLD pin 14 | SLD |
-| PC13 | — | Available | — | — | — |
-| PD2 | — | Available | — | — | — |
+4.7k pull-ups to 3.3 V on the PCB (the touch pull-ups of v3.x). I2C1 stays spare on the header if layout prefers to split the load cells or the touch controller onto a second bus.
 
-### 3.3 PCF8574 #2 (I2C 0x21) Allocation
+> [!note]
+> The PCA9685 answers its All-Call address 0x70 (MODE1.ALLCALL = 1 after reset) as well as 0x41, so the TCA9543A is strapped to **0x71** (A0 = 1, A1 = 0) and never shares an address with it. `epicurad` additionally clears ALLCALL at init so 0x70 stays free.
+
+### 3.2 GPIO (3, fixed at layout)
+
+| Signal | Direction (RV1106 view) | Circuit | Purpose |
+|--------|-------------------------|---------|---------|
+| PCA9685_OE | Out | PCA9685 OE, 10k pull-up to 3.3 V | Active-low output enable; servos limp at boot and whenever the RV1106 is in reset |
+| DOCK_SENSE_A | In | J_DOCK pad 7, 10k pull-up to 3.3 V | Low = docked (pad grounded on the CS); GPIO edge interrupt + 1 Hz poll |
+| DOCK_PWR_OK | In | DOCK_24V → 100k/10k divider → 2N7002 gate; drain 10k pull-up to 3.3 V | Active-low: low while DOCK_24V > ~15 V. High while docked = CS mains lost (AC Power Failure pause) |
+
+### 3.3 PWM (4 channels, fixed at layout)
+
+| Signal | Destination | Frequency | Purpose |
+|--------|-------------|-----------|---------|
+| PWM_PUMP_OIL | TB6612 PWMA via 100R | 20 kHz | Oil pump speed |
+| PWM_PUMP_WATER | TB6612 PWMB via 100R | 20 kHz | Water pump speed |
+| PWM_LED | Q_LED gate (IRLML6344) via 100R | 1 kHz | White ring: OFF 0 %, CAPTURE 100 %, NIGHT 30 % |
+| PWM_BUZZER | Q_BUZZ gate (2N7002) via 100R | 2–4 kHz tone | Piezo buzzer |
+
+All four PWM lines have 10k pull-downs so pumps, ring and buzzer are off while the RV1106 boots. `pwm-rockchip` exposes them in `/sys/class/pwm`.
+
+### 3.4 PCF8574 #2 (I2C 0x21) Allocation
 
 | Pin | Direction | Signal | Notes |
 |-----|-----------|--------|-------|
 | P0 | Out | SLD solenoid 1 (oil) | IRLML6344 gate via 100R, 10k pull-down |
 | P1 | Out | SLD solenoid 2 (water) | IRLML6344 gate via 100R, 10k pull-down |
 | P2 | Out | Status LED (green) | Active-low, 330R |
-| P3 | Out | LED ring 5 V enable | Q_LED_N → Q_LED_P high-side switch |
-| P4 | Out | DSB 6.5 V rail enable | Q_DSB P-MOSFET via level shifter; on only during a dispense |
-| P5 | Out | Stirring motor 24 V enable | Q_STIR P-MOSFET via level shifter; off in boot-safe state and on E-stop |
+| P3 | Out | TB6612 AIN1 (oil pump direction) | AIN2 tied to GND |
+| P4 | Out | 6V_DSP rail enable | Q_DSB P-MOSFET via 2N7002 level shifter; on only during a dispense |
+| P5 | Out | TB6612 BIN1 (water pump direction) | BIN2 tied to GND |
 | P6 | In | TP5100 CHRG (charging, active-low) | Open-drain from charger, 10k pull-up |
 | P7 | In | TP5100 STDBY (charge complete, active-low) | Open-drain from charger, 10k pull-up |
 
-### 3.4 Pin Usage Summary
+### 3.5 Header Pin Changes vs v3.x
 
-| Port | Used | Available |
-|------|------|-----------|
-| PA | PA1, PA2, PA3, PA6, PA11–PA15 (9) | PA0, PA4, PA5, PA7, PA8, PA9, PA10 (7) |
-| PB | PB0, PB1, PB2, PB4, PB7–PB10, PB12–PB14 (11) | PB3, PB5, PB6, PB11, PB15 (5) |
-| PC | PC0, PC1, PC3–PC7, PC9–PC12, PC14, PC15 (13) | PC2, PC8, PC13 (3) |
-| PD | — | PD2 (1) |
-
-The arm's PWM/EN/DIR pins and the stepper/pneumatic lines of earlier revisions are gone; the board has 16 spare GPIO.
+| Header resource | v3.x | v4.0 |
+|-----------------|------|------|
+| Pins 8/10 (UART2) | Service link to STM32 USART2 | Freed (the STM32 is in a different unit); STM32 firmware goes over CAN (§7) |
+| GPIO 32 / GPIO 38 | STM32 BOOT0 / NRST | Freed |
+| I2C3 (16/18) | FT6336 touch only | Every I2C device on the board (§3.1) |
+| GPIO | MCP2518FD nINT, TP_RST | + PCA9685 OE, DOCK_SENSE_A, DOCK_PWR_OK |
+| PWM | PWM10 (LCD backlight) | + 4 channels (§3.3) |
+| SPI0 CS0/CS1, UART0 console, CSI camera | — | Unchanged |
 
 ---
 
 ## 4. Power Supply
 
-### 4.1 24V Input Protection Chain
+### 4.1 Dock 24 V Input (DOCK_24V via J_DOCK)
 
 ```
-24V from PSU ──── F1 (5A Polyfuse) ──── D1 (SS54 Schottky) ────┬── D2 (SMBJ24A TVS) ──── 24V Internal
-                                                               │
-                                                              GND
+J_DOCK pad 1 (DOCK_24V) ──┬── D2 (SMBJ24A TVS) ──── C_IN (10 µF, 50 V) ──── 24V Internal ──► MP1584EN #1, D_SYS1, DOCK_PWR_OK divider
+J_DOCK pad 2 (GND)   ─────┴── GND
 ```
 
 | Component | Part | Function |
 |-----------|------|----------|
-| F1 | 5A resettable polyfuse (1812) | Overcurrent protection |
-| D1 | SS54 (5A, 40V Schottky) | Reverse polarity protection (0.5 V drop) |
-| D2 | SMBJ24A (24V TVS, 600W) | Transient suppression |
+| D2 | SMBJ24A (24 V TVS, 600 W) | Transient suppression at the pad (hot-plug on the pogo contact) |
+| C_IN | 10 µF 50 V MLCC + 100 nF | Pad-side decoupling |
 
-### 4.2 24V → 12V Rail (MP1584EN #1)
+There is no polyfuse and no reverse diode on this side: DOCK_24V is already fused (F_DOCK 2 A) and switched (Q_DOCK) on the CSC, and the keyed recess makes reverse connection impossible. Pads are dead until the CSC sees DOCK_SENSE_B low, so the pogo contacts never make or break under load. Input budget: ≤ 2 A at 24 V (pin and fuse rating), see §4.11.
+
+### 4.2 24V → 12V Rail (MP1584EN #1) — Charger Only
 
 | Parameter | Value |
 |-----------|-------|
-| Output | 12 V, 3 A max |
-| Load | Exhaust fans (2x 0.5 A), SLD peristaltic pumps (2x 0.6 A, during dispense), SLD solenoids (2x 0.5 A, during dispense), TP5100 battery charger (~0.4 A while charging) |
+| Output | 12 V, 3 A max (loaded ≤ 1 A) |
+| Load | TP5100 battery charger only (~0.8 A input at 1.0 A charge current) |
 | Inductor | 33 µH, CDRH104R, Isat > 4 A |
 | Output caps | 2x 22 µF MLCC (25 V) + 100 µF electrolytic |
 | Feedback | 140k / 10k → 12.0 V |
-| Protection | 3 A polyfuse + SMBJ12A on output |
+| Protection | 1.5 A polyfuse + SMBJ12A on output |
 
-The 5 V buck no longer hangs off this rail (see §4.4), so the 12 V rail carries only actuators and the charger: ~1.4 A typical, 3 A worst case with both pumps and both solenoids energised at once (the firmware never does this).
+No fans, pumps or solenoids remain on 12 V (fans are on the CSC; pumps and solenoids moved to 6V_DSP), so the rail exists only because the TP5100's input range does not reach 24 V. It is up only while docked with CS mains present.
 
-### 4.3 24V → 6.5V DSB Rail (MP1584EN #2)
+### 4.3 VSYS → 6.0 V Dispenser Rail (MP1584EN #2, 6V_DSP)
 
 | Parameter | Value |
 |-----------|-------|
-| Output | 6.5 V, 3 A max |
-| Load | Four hobby servos, one moving at a time: DS3218 (C1, 2.2 A stall), 2x MG996R (F1, F2, ~2.5 A stall), MG90S (F3, ~0.7 A stall, fed through D_DSB4) |
+| Input | VSYS (23.5 V docked, 6.0–8.4 V on the pack) |
+| Output | 6.0 V, 3 A max |
+| Load | Four hobby servos, one moving at a time: DS3218 (C1, 2.2 A stall), 2x MG996R (F1, F2, ~2.5 A stall), MG90S (F3, ~0.7 A stall) — all rated for 6.0 V, no series drop needed; TB6612 VM (two 6 V peristaltic pumps, ~0.6 A each); two 6 V NC solenoids (~0.5 A each) |
 | Inductor | 22 µH, CDRH104R, Isat > 4 A |
 | Output caps | 2x 22 µF MLCC + 470 µF electrolytic (10 V, low ESR) |
-| Feedback | 71.5k / 10k → 6.52 V |
-| Rail switch | Q_DSB: AO3401-class P-MOSFET high-side switch driven by a 2N7002 level shifter from PCF8574 #2 P4; 1000 µF bulk and 3 A PTC on the switched side |
-| Protection | 3 A polyfuse + SMBJ6.5A TVS |
+| Feedback | 64.9k / 10k → 5.99 V |
+| Rail switch | Q_DSB: AO3401-class P-MOSFET high-side switch driven by a 2N7002 level shifter from PCF8574 #2 P4; 1000 µF bulk and 3 A PTC on the switched side; INA219 #1 shunt (§8) on the switched side |
+| Protection | 3 A PTC + SMBJ6.0A TVS |
 
-The rail is on only while a dispense is in progress (no idle servo buzz or heat).
+The rail is on only while a dispense is in progress (no idle servo buzz or heat), so the pack sees no actuator load between dispenses. On an empty pack (6.2 V) the buck drops out to ≈ 6.0 V, which is acceptable; the dispense thread refuses new moves below the 6.2 V halt threshold anyway.
 
-### 4.4 VSYS Diode-OR and 24V/Battery → 5V Rail (TPS54531)
+### 4.4 VSYS Diode-OR and Dock/Battery → 5V Rail (TPS54531)
 
-The 5 V logic domain (Pico Zero, LCD, STM32, CAN domain, LED ring) is fed by a TPS54531 buck whose input, **VSYS**, is a Schottky-OR of the 24 V internal rail and the 2S battery:
+The 5 V domain (Pico Zero, LCD, LED ring, buzzer, 3.3 V logic) is fed by a TPS54531 buck whose input, **VSYS**, is a Schottky-OR of the dock 24 V and the 2S battery — the same circuit as v3.x with new sources:
 
 ```
-24V Internal ──── D_SYS1 (SS54) ──┐
-                                   ├── VSYS ──── C_SYS (100 µF, 35 V) ──► TPS54531 VIN
-BAT+ (6.0–8.4 V) ─ D_SYS2 (SS54) ──┘
+24V Internal (DOCK_24V) ── D_SYS1 (SS54) ──┐
+                                            ├── VSYS ──── C_SYS (100 µF, 35 V) ──► TPS54531 VIN, MP1584EN #2 VIN
+BAT+ (6.0–8.4 V) ───────── D_SYS2 (SS54) ──┘
 ```
 
 | Parameter | Value |
 |-----------|-------|
 | IC | TPS54531DDAR (SOIC-8), VIN 3.5–28 V |
-| Input | VSYS: ~23.5 V on mains, 5.5–7.9 V on battery |
+| Input | VSYS: ~23.5 V docked with CS mains, 5.5–7.9 V on the pack (lifted, or docked during an outage) |
 | Output | 5V_MAIN, 5 A max |
-| Load | Pico Zero (0.2 A typ, 0.5 A peak), LCD + backlight (0.15 A), AMS1117 (0.2 A), B0505S (0.05 A), LED ring (1 A peak, switched), buzzer |
+| Load | Pico Zero (0.2 A typ, 0.5 A peak), LCD + backlight (0.15 A), AMS1117 (0.3 A), white LED ring (≤ 1 A, PWM), buzzer |
 | Inductor | 10 µH, CDRH127, Isat > 6 A |
 | Output caps | 2x 22 µF MLCC (10 V) + 220 µF electrolytic |
 | Feedback | 52.3k / 10k → 4.98 V |
 | Switching | 570 kHz; integrated OCP, thermal shutdown, UVLO |
 
-Switch-over is passive: while 24 V is present D_SYS2 is reverse-biased and the battery does not discharge; when the PSU drops out VSYS falls to the battery voltage within the hold-up of C_SYS and the buck keeps regulating. No controller, no gap.
+Switch-over is passive: while DOCK_24V is present D_SYS2 is reverse-biased and the battery does not discharge; when the DU is lifted or the CS loses mains, VSYS falls to the battery voltage within the hold-up of C_SYS and the buck keeps regulating. No controller, no gap. VSYS also feeds MP1584EN #2 (§4.3), so dispensing works on either source.
 
-### 4.5 Two-Source 5V Schottky-OR → 3.3V Rail (AMS1117-3.3)
+### 4.5 5V_MAIN → 3.3V Rail (AMS1117-3.3)
 
 ```
-5V_MAIN (TPS54531, 24 V or battery) ── D_OR1 (SS14) ──┐
-                                                        ├── 5V_MERGED ──► AMS1117-3.3 ──► 3.3V
-5V_USB  (USB-C VBUS, 500 mA polyfuse) ── D_OR2 (SS14) ──┘
+5V_MAIN (TPS54531, dock or battery) ──► AMS1117-3.3 ──► 3.3V
 ```
 
-The USB path powers only the STM32 (3.3 V) for bench programming without a PSU or battery; it does not feed the Pico Zero or the 5V_MAIN loads (D_OR1 blocks back-feed). 3.3 V loads: STM32 (~0.15 A), PCA9685, PCF8574 #2, INA219, SN65HVD230, ISO1050 VCC1 x2, MCP2518FD, 74AHCT1G125, HX711 supply via J_SLD.
+The USB Schottky-OR of v3.x is gone (there is no USB-C on this board; the Pico Zero's own USB-C port is the DU's only one). 3.3 V loads: PCA9685, PCF8574 #2, INA219 x2, TCA9543A, NAU7802 x2 (including their bridge excitation, ~10 mA per cell), MCP2518FD, ISO1050 #2 VCC1, TB6612 VCC — ~0.15 A typical, 0.3 A max.
 
-### 4.6 2-Cell Li-ion Backup
+### 4.6 2-Cell Li-ion Pack — Primary Supply
 
 #### 4.6.1 Pack
 
@@ -383,7 +300,8 @@ The USB path powers only the STM32 (3.3 V) for bench programming without a PSU o
 | Temperature sense | 10 kΩ NTC (B = 3435) glued to the cells, wired to J_BAT pin 3 |
 | Connector | J_BAT, JST-XH 2.5 mm 3-pin: B+, B−, NTC |
 | Cells | IEC 62133-2 / IS 16046 certified cells and pack (required for BIS) |
-| Placement | In the cool zone of the enclosure (< 45 °C), away from the induction module and the PSU |
+| Placement | In the DU, which is the cool zone by definition (the heat, PSU and fans are in the CS); keep the pack away from the LED ring and the camera window |
+| Run time | Lifted-unit load ≈ 3 W (RV1106 + LCD + logic) → > 5 h on a 2,600 mAh pack; a full session docked draws from the dock, not the pack |
 
 #### 4.6.2 Charger (TP5100)
 
@@ -392,7 +310,7 @@ The USB path powers only the STM32 (3.3 V) for bench programming without a PSU o
                                      │
                                      ├── SW ── L_CHG (22 µH, Isat > 2 A) ──┬── R_CS (sense) ──► BAT+ (J_BAT pin 1)
                                      │        D_CHG (SS34) to GND         │
-                                     ├── VS / BAT ◄──────────────────────┘   (charge current = 0.1 V / R_CS; 0.2 Ω → 0.5 A)
+                                     ├── VS / BAT ◄──────────────────────┘   (charge current = 0.1 V / R_CS; 0.1 Ω → 1.0 A)
                                      ├── TEMP ◄── NTC (J_BAT pin 3) + 10k bias
                                      ├── CS (cell select) ── pulled for 2S (8.4 V)
                                      ├── CHRG ──► PCF8574 #2 P6 (10k pull-up to 3.3 V) + red LED
@@ -404,102 +322,91 @@ The USB path powers only the STM32 (3.3 V) for bench programming without a PSU o
 | IC | TP5100 (QFN-16, LCSC C379389), switching CC/CV charger, 1S/2S selectable |
 | Input | 12 V rail (within the TP5100's 5–18 V range; 24 V exceeds it) |
 | Charge voltage | 8.4 V (2S mode) |
-| Charge current | 0.5 A (R_CS = 0.2 Ω, 1 %, 0.5 W) — ~5–6 h full charge; keeps the charger within the 12 V rail budget |
+| Charge current | **1.0 A** (R_CS = 0.1 Ω, 1 %, 0.5 W) — ≈ 3 h from empty while docked; the pack is now the primary supply, so it must refill within a normal cooking session |
 | Pre-charge / termination | Trickle below 2S 6.0 V; termination at C/10; auto-recharge when the pack sags |
 | Temperature window | NTC on TEMP pin: charging inhibited below 0 °C or above 45 °C |
-| Status | CHRG and STDBY open-drain outputs to PCF8574 #2 P6/P7 (polled at 1 Hz) and two 0603 LEDs |
-| Charge source | 12 V rail only: the pack charges whenever the PSU is on |
+| Status | CHRG and STDBY open-drain outputs to PCF8574 #2 P6/P7 (polled at 1 Hz by `epicurad`) and two 0603 LEDs |
+| Charge source | 12 V rail only: the pack charges whenever the DU is docked and the CS has mains (DOCK_PWR_OK low) |
 
 > [!note]
-> Confirm the R_CS current-programming relation and the CS pin strapping against the TP5100 datasheet before layout; retailer summaries disagree on the input range (5–12 V vs 5–18 V), which is why the charger runs from the 12 V rail and not from 24 V.
+> Confirm the R_CS current-programming relation and the CS pin strapping against the TP5100 datasheet before layout; retailer summaries disagree on the input range (5–12 V vs 5–18 V), which is why the charger runs from the 12 V rail and not from 24 V. At 1.0 A check the TP5100's thermal pad pour (§12).
 
 #### 4.6.3 Discharge Path and Monitoring
 
-- BAT+ → D_SYS2 (SS54) → VSYS → TPS54531 (§4.4). Maximum discharge ~1.2 A at 6 V for the full 5 V load; the pack PCM over-current limit (3–5 A) is well above this.
-- Pack voltage → R_BAT1 (100k) / R_BAT2 (22k) divider → PC1 (ADC1_IN7): 8.4 V reads 1.51 V, 6.0 V reads 1.08 V. The STM32 reports `batt_mV` and `on_battery` in STATUS (0x312) and TELEMETRY flags; the RV1106 shows the state of charge and warns below 6.4 V.
-- Under-voltage: at 6.2 V the STM32 asks the RV1106 to checkpoint and shut down (the pack PCM cuts off at 2x 2.8 V = 5.6 V as a last resort).
+- BAT+ → R_SH2 (10 mΩ) → D_SYS2 (SS54) → VSYS → TPS54531 and MP1584EN #2 (§4.4, §4.3). Lifted-unit discharge ~0.45 A at 7.4 V; up to ~3 A for a servo move on the pack; the pack PCM over-current limit (3–5 A) is the ceiling, and the dispense thread holds one servo at a time.
+- Pack monitoring: **INA219 #2 (I2C3 0x44)** across R_SH2 reports pack voltage (bus input on BAT+) and signed current (charge in, discharge out). It replaces the v3.x 100k/22k divider on an STM32 ADC. `epicurad` derives the state of charge from voltage + coulomb count and shows a battery indicator that is always visible on the DU display.
+- Self-managed thresholds: warning banner at 6.4 V; checkpoint + halt at 6.2 V (boot recovery on the next power-up); the pack PCM cuts off at 2x 2.8 V = 5.6 V as a last resort.
 
 #### 4.6.4 What the Battery Powers
 
+Everything on the board. The pack is the primary supply of the DU; the dock only adds charge current and lifts VSYS above the pack voltage so the pack rests while docked.
+
 | Domain | On battery | Notes |
 |--------|------------|-------|
-| 5V_MAIN: Pico Zero, LCD, STM32 (3.3 V), CAN transceivers, MCP2518FD | Yes | ~3 W total → > 4 h from a 2,600 mAh pack |
-| LED ring (5 V, switched) | Off | Firmware turns it off on POWER_FAIL |
-| 12 V rail (fans, pumps, solenoids, charger) | No | 24 V gone |
-| 6.5 V DSB rail, 24 V_STIR, safety relay | No | Actuators and the heater are down; the induction surface has its own AC inlet and is off anyway |
+| 5V_MAIN: Pico Zero, LCD, 3.3 V logic, MCP2518FD, ISO1050 #2 logic side | Yes | ~3 W → > 5 h lifted |
+| White LED ring (5V_MAIN, PWM) | Yes | `epicurad` keeps it OFF while lifted or on a power-fail pause |
+| 6V_DSP (servos, pumps, solenoids) | Yes | Rail on only during a dispense; refused below 6.2 V |
+| 12 V (charger) | No | DOCK_24V gone — no charging |
+| 5V_ISO / CAN bus side | No | Comes from the dock; lifting the DU opens the bus by design |
 
-The purpose is the same as the earlier UPS: ride through short outages, checkpoint the cooking session, keep the UI and Wi-Fi alive to tell the user, and resume if mains returns within the food-safety window (see [[../03-Software/03-Main-Loop-State-Machine|Main Loop State Machine]] §5).
+The purpose: ride through a CS mains outage without losing the session (checkpoint, keep the UI and Wi-Fi alive, resume if mains returns within the food-safety window, see [[../03-Software/03-Main-Loop-State-Machine|Main Loop State Machine]] §5), and keep the DU alive while it is lifted off for loading and cleaning.
 
-### 4.7 24V Power Failure Detection
+### 4.7 Dock Power Sense (DOCK_PWR_OK)
 
 ```
-24V Internal ─── R_DIV1 (100k) ──┬── R_DIV2 (10k) ─── GND
-                                  ├── C_DIV (100nF) ─── GND
-                                  └── PA1 (COMP1_INP)
+24V Internal (DOCK_24V) ─── R_DIV1 (100k) ──┬── R_DIV2 (10k) ─── GND
+                                             ├── C_DIV (100nF) ─── GND
+                                             └── Q_PWR (2N7002) gate ── drain ── 10k to 3.3V ──► RV1106 GPIO DOCK_PWR_OK (active-low)
 ```
 
 | Parameter | Value |
 |-----------|-------|
 | Divider | 1/11 → 2.18 V at 24 V |
-| Threshold | ~1.5 V (COMP1 internal reference) → trips at 24 V < 16.5 V |
-| Recovery | > 20 V sustained 2 s (firmware debounce) |
-| Response | < 100 µs (comparator interrupt) |
+| Threshold | 2N7002 Vgs(th) 1.0–2.5 V → DOCK_PWR_OK goes high (inactive) when DOCK_24V < ~11–20 V; firmware confirms with a 300 ms TELEMETRY timeout |
+| Recovery | DOCK_24V back for 2 s (firmware debounce) |
+| Response | GPIO edge interrupt |
 
-On trip the STM32 sets `on_battery`, drops all 12 V / 6.5 V / 24 V_STIR loads (they are already unpowered), turns the LED ring off and reports POWER_FAIL in STATUS (0x312).
+Together with DOCK_SENSE_A (§3.2) the RV1106 distinguishes the two pause causes: DOCK_SENSE_A low + DOCK_PWR_OK inactive = CS mains lost (AC Power Failure, auto-resume); DOCK_SENSE_A high = Unit Lifted (resume by user tap after re-docking). In both cases the heater and stir motor are already down on the CS side (keep-alive loss and the CSC's DOCK_SENSE_B hold). No 24 V comparator or STM32 is involved any more.
 
-### 4.8 Stirring Motor 24 V Switch (Q_STIR)
+### 4.8 Stirring Motor 24 V Switch — removed
 
-```
-24V Internal ──► F_STIR (5A polyfuse) ──► Q_STIR: AO4407A (P-MOSFET, SO-8, -30 V, -12 A) ──► 24V_STIR ──► J_STIR_PWR pin 1
-                                             Gate ── 10k to 24V (default OFF)
-                                             Gate ── Q_STIR_N: 2N7002 drain; 2N7002 gate ── 100R ── PCF8574 #2 P5, 10k pull-down
-                                          C_STIR: 100 µF (35 V) + 10 µF MLCC on 24V_STIR
-```
-
-The motor's own firmware stops it when CAN commands cease, but the switch gives the STM32 a command-independent way to de-energise the arm in the boot-safe state and on E-stop, and lets the INA219 attribute 24 V current to the arm when the DSB rail is off.
+Q_STIR, F_STIR and J_STIR_PWR moved to the CSC (FDCAN2 side, enable from STM32 PB4); see [[02-Cooking-Surface-Controller|Cooking Surface Controller]] §6. No 24 V load remains on this board besides the charger buck and D_SYS1.
 
 ### 4.9 Per-Rail Protection
 
 | Rail | Polyfuse | TVS | Notes |
 |------|----------|-----|-------|
-| 24V input | 5 A (F1) | SMBJ24A | Reverse-polarity SS54 |
-| 24V_STIR | 5 A (F_STIR) | — | Behind Q_STIR |
-| 12V | 3 A | SMBJ12A | Fans, pumps, solenoids, charger |
-| 6.5V DSB | 3 A PTC | SMBJ6.5A | Switched rail |
+| DOCK_24V | 2 A on the CSC (F_DOCK) | SMBJ24A at the pad | Switched by Q_DOCK on the CSC; no reverse diode (keyed dock) |
+| 12V | 1.5 A | SMBJ12A | Charger only |
+| 6V_DSP | 3 A PTC | SMBJ6.0A | Switched rail; INA219 #1 shunt |
 | 5V_MAIN | — | — | TPS54531 integrated OCP |
-| 5V_USB | 500 mA (F_USB) | USBLC6 on data | |
-| Battery | Pack PCM | — | D_SYS2 blocks back-charging from 24 V |
+| 5V_ISO | 100 mA on the CSC (F_CAN) | — | Arrives over dock pad 6 |
+| Battery | Pack PCM | — | D_SYS2 blocks back-charging from DOCK_24V; R_SH2 10 mΩ in the path |
 
 ### 4.10 Decoupling
 
-- 100 nF MLCC within 5 mm of every STM32 VDD/VSS pair; 1 µF + ferrite bead on VDDA
-- 10 µF at LDO input and output; 100 nF + 10 µF at each IC supply pin (PCA9685, PCF8574, INA219, MCP2518FD, SN65HVD230, ISO1050 both sides, 74AHCT1G125, TB6612 VM and VCC)
+- 10 µF at LDO input and output; 100 nF + 10 µF at each IC supply pin (PCA9685, PCF8574 #2, INA219 x2, TCA9543A, NAU7802 x2, MCP2518FD, ISO1050 #2 both sides, TB6612 VM and VCC)
+- NAU7802: 0.1 µF + 10 µF on AVDD (internal LDO output used as bridge excitation), per datasheet, away from the bucks
+- 10 µF + 100 nF at the dock pads on DOCK_24V and 5V_ISO
 
 ### 4.11 Power Budget Summary
 
 | Rail | Source | Typical (A) | Peak (A) | Notes |
 |------|--------|-------------|----------|-------|
-| 3.3V (0.8 A max) | 5V_MERGED → AMS1117 | 0.20 | 0.35 | STM32, I2C ICs, CAN logic sides, HX711 |
-| 5V_MAIN (5 A max) | VSYS → TPS54531 | 0.7 | 2.2 | Pico Zero + LCD + LDO + B0505S + LED ring (1 A peak) |
-| 12V (3 A max) | 24V → MP1584EN #1 | 1.4 | 3.0 | Fans continuous; pumps/solenoids and charger intermittent |
-| 6.5V DSB (3 A max) | 24V → MP1584EN #2 | 0 | 2.5 | One servo at a time, rail off when idle |
-| 5V_ISO (200 mA max) | 5V_MAIN → B0505S | 0.08 | 0.15 | Two ISO1050 bus sides (~40 mA each) |
-| 24V_STIR | 24V via Q_STIR | 1.0 | 3.0 | CAN servo motor |
-| **24V input** | **Mean Well LRS-75-24 (3.2 A)** | **~2.1** | **~3.0** | Firmware sequences DSB moves and dispenses so the peak is never simultaneous with full stir torque |
-| Battery (on outage) | 2S pack → D_SYS2 → VSYS | 0.45 @ 7.4 V | 0.8 | Logic domain only |
+| 3.3V (0.8 A max) | 5V_MAIN → AMS1117 | 0.15 | 0.30 | I2C ICs, NAU7802 x2, MCP2518FD, ISO1050 #2 logic side, TB6612 VCC |
+| 5V_MAIN (5 A max) | VSYS → TPS54531 | 0.6 | 1.9 | Pico Zero + LCD + LDO + white ring (1 A peak) |
+| 6V_DSP (3 A max) | VSYS → MP1584EN #2 | 0 | 2.5 | One servo at a time, or a pump + solenoid pair; rail off when idle |
+| 12V (loaded ≤ 1 A) | DOCK_24V → MP1584EN #1 | 0.8 | 0.9 | TP5100 at 1.0 A charge; docked with mains only |
+| 5V_ISO | Dock pad 6 (CSC B0505S) | 0.04 | 0.06 | ISO1050 #2 bus side only |
+| **DOCK_24V input** | **CS via Q_DOCK, F_DOCK 2 A** | **~0.6** | **~1.6** | Charging + logic ≈ 0.6 A; + a servo move on the dock ≈ 1.6 A |
+| Battery (lifted, or docked during an outage) | 2S pack → R_SH2 → D_SYS2 → VSYS | 0.45 @ 7.4 V | 3.0 | Whole board; the peak is a DS3218/MG996R stall on the pack |
 
 > [!warning]
-> The 24 V budget is tight at peak. The firmware mutex that already serialises DSB servo moves must also hold the stir motor at reduced torque (velocity limit) while a carousel indexes. Monitor the INA219 during integration and move to the LRS-100-24 (4.2 A) if the measured peak exceeds 3 A.
+> The dock pin rating (2 A per contact) and F_DOCK (2 A) set the input ceiling. The 1.6 A peak assumes the charger is at full current while a servo indexes; `epicurad` must not raise the LED ring to 100 % at the same moment, or the charger input is the first thing to sag (harmless, but it lengthens the charge). Monitor INA219 #2 during integration.
 
-### 4.12 Isolated 5V DC-DC (B0505S-1WR3)
+### 4.12 Isolated 5V DC-DC — removed
 
-The two ISO1050DUB transceivers on the heater bus share one isolated supply domain: 5V_ISO / GND_ISO from a Mornsun B0505S-1WR3 fed from 5V_MAIN (before the Schottky-OR, for margin).
-
-| Parameter | Value |
-|-----------|-------|
-| IC | B0505S-1WR3 (SIP-4), 1 W, 3 kVDC isolation |
-| Input | 5V_MAIN; C_ISO_IN 10 µF |
-| Output | 5V_ISO, 200 mA max; C_ISO_OUT 10 µF; loads: ISO1050 #1 + #2 VCC2 (~80 mA), optional J_CAN_HEAT pin 4 |
+The B0505S-1WR3 moved to the CSC, which generates the single 5V_ISO / GND_ISO domain for the whole isolated bus and extends it to this board over dock pads 5–6 (F_CAN 100 mA on the CSC). The ISO1050DUB #2 bus side is its only load here (~40 mA). No isolated DC-DC on this board.
 
 ---
 
@@ -507,17 +414,15 @@ The two ISO1050DUB transceivers on the heater bus share one isolated supply doma
 
 ### 5.1 Mechanical
 
-The Luckfox Pico Zero (65 x 30 mm) seats pin-down into **J_AP**, a 2x20 2.54 mm female socket (8.5 mm stacking height) on the top side of the PCB, and is held by four M2.5 standoffs matching the module's 3.0 mm mounting holes. Its USB-C port and microSD slot face the board edge for access; the CSI FPC connector faces inward with clearance for the camera cable. The module's on-board Wi-Fi antenna must point away from the buck converters; the external-antenna connector is used when the enclosure is metal.
+The Luckfox Pico Zero (65 x 30 mm) seats pin-down into **J_AP**, a 2x20 2.54 mm female socket (8.5 mm stacking height) on the top side of the PCB, and is held by four M2.5 standoffs matching the module's 3.0 mm mounting holes. Its USB-C port and microSD slot face the board edge for access; the CSI FPC connector faces inward with clearance for the camera cable, which runs to the IMX415-98 camera on the DU underside, centred over the pot behind the sealed window. The module's on-board Wi-Fi antenna must point away from the buck converters; the external-antenna connector is used when the enclosure is metal.
 
 ### 5.2 J_AP Pin Usage (RPi-style 40-pin numbering)
 
 | Header pin | Signal | Direction (Pico Zero view) | Destination on PCB | Purpose |
 |------------|--------|-----------------------------|--------------------|---------|
-| 2, 4 | 5V | In | 5V_MAIN (battery-backed) | Module power, ~1 W (its own regulators make 3.3 V / core rails) |
-| 1, 17 | 3.3V (module output) | Out | Not used | STM32 side has its own 3.3 V |
+| 2, 4 | 5V | In | 5V_MAIN (battery / dock) | Module power, ~1 W (its own regulators make 3.3 V / core rails) |
+| 1, 17 | 3.3V (module output) | Out | Not used | The board has its own 3.3 V |
 | 6, 9, 14, 20, 25, 30, 34, 39 | GND | — | GND | Common ground |
-| 8 | UART2_TX | Out | STM32 PA3 (USART2_RX) | Service link (ST bootloader, debug) |
-| 10 | UART2_RX | In | STM32 PA2 (USART2_TX) | Service link |
 | 19 | SPI0_MOSI | Out | J_LCD MOSI and MCP2518FD SI | Shared SPI0 |
 | 21 | SPI0_MISO | In | MCP2518FD SO (and J_LCD MISO, unused) | Shared SPI0 |
 | 23 | SPI0_CLK | Out | J_LCD SCK and MCP2518FD SCK | 50 MHz to LCD, ≤ 20 MHz when CS1 is active |
@@ -527,21 +432,25 @@ The Luckfox Pico Zero (65 x 30 mm) seats pin-down into **J_AP**, a 2x20 2.54 mm 
 | 22 | GPIO | Out | J_LCD DC | LCD data/command |
 | 26 | GPIO | Out | J_LCD RST | LCD reset |
 | 12 | PWM10 | Out | J_LCD BL | Backlight PWM (via on-board 2N7002 if the module's LED pin needs > 20 mA) |
-| 16 | I2C3_SDA | Bidir | J_LCD TP_SDA | FT6336 touch, 4.7k pull-up on PCB |
-| 18 | I2C3_SCL | Bidir | J_LCD TP_SCL | FT6336 touch, 4.7k pull-up on PCB |
+| 16 | I2C3_SDA | Bidir | J_LCD TP_SDA + all on-board I2C devices (§3.1) | 400 kHz, 4.7k pull-up on PCB |
+| 18 | I2C3_SCL | Bidir | J_LCD TP_SCL + all on-board I2C devices (§3.1) | 400 kHz, 4.7k pull-up on PCB |
 | 36 | GPIO | In | J_LCD TP_INT | Touch interrupt, active-low |
 | spare GPIO (fixed at layout) | GPIO | Out | J_LCD TP_RST | Touch reset |
-| GPIO 32 | GPIO | Out | STM32 BOOT0 via R_AP_BOOT (1k) | Enter the ST system bootloader for STM32 firmware update |
-| GPIO 38 | GPIO | Out | STM32 NRST via R_AP_RST (1k), open-drain | Reset pulse during firmware update; SW_RST in parallel |
+| spare GPIO (fixed at layout) | GPIO | Out | PCA9685 OE (10k pull-up) | Servo output enable, active-low |
+| spare GPIO (fixed at layout) | GPIO | In | J_DOCK pad 7 DOCK_SENSE_A (10k pull-up) | Low = docked |
+| spare GPIO (fixed at layout) | GPIO | In | Q_PWR drain (10k pull-up) DOCK_PWR_OK | Low = dock 24 V present |
+| spare PWM (fixed at layout) x4 | PWM | Out | TB6612 PWMA, TB6612 PWMB, Q_LED gate, Q_BUZZ gate | Pumps, white ring, buzzer (§3.3) |
+| 8, 10 | UART2 TX/RX | — | Not connected (freed) | Was the STM32 service link in v3.x |
+| GPIO 32, GPIO 38 | — | — | Not connected (freed) | Were STM32 BOOT0 / NRST in v3.x |
 | 35, 37 | UART0 TX/RX | — | J_AP test pads only | Luckfox debug console |
 | all others | — | — | Not connected | |
 
 > [!note]
-> The RV1106 has no CAN peripheral. Its CAN node (MCP2518FD + ISO1050DUB #2, §7.2) lives on this board and is reached through SPI0 CS1 on J_AP. The LCD and the CAN controller share SPI0 MOSI/MISO/CLK; the controller's 32-object RX FIFO absorbs frames while an LCD DMA chunk (≤ 10 ms) holds the bus.
+> The RV1106 has no CAN peripheral. Its CAN node (MCP2518FD + ISO1050DUB #2, §7) lives on this board and is reached through SPI0 CS1 on J_AP; the bus itself arrives over the dock. The LCD and the CAN controller share SPI0 MOSI/MISO/CLK; the controller's 32-object RX FIFO absorbs frames while an LCD DMA chunk (≤ 10 ms) holds the bus. STM32 firmware updates no longer pass through this header: the RV1106 streams the image over CAN (0x7E0/0x7E8) to the CSC's in-application bootloader.
 
 ### 5.3 J_LCD — 4" ST7796S + FT6336 Display Break-out (1x14 pin header, 2.54 mm)
 
-The display module's 14-pin header plugs into J_LCD with a short ribbon (< 20 cm). Pin order follows the common 4.0" ST7796S capacitive SPI module; confirm against the chosen panel before layout.
+The display module's 14-pin header plugs into J_LCD with a short ribbon (< 20 cm) to the DU front face, where the panel is tilted 15–30°. Pin order follows the common 4.0" ST7796S capacitive SPI module; confirm against the chosen panel before layout.
 
 | Pin | Signal | Source |
 |-----|--------|--------|
@@ -560,114 +469,126 @@ The display module's 14-pin header plugs into J_LCD with a short ribbon (< 20 cm
 | 13 | TP_INT | J_AP 36 |
 | 14 | GND | GND |
 
-### 5.4 Service UART and Firmware Update
-
-USART2 (PA2/PA3) ↔ UART2 (J_AP 8/10) at 3.3 V carries only the ST system-bootloader protocol (STM32 firmware updates pushed by the RV1106, which drives BOOT0 and NRST through J_AP GPIO 32/38) and an optional debug console at 1 Mbps. All runtime commands and telemetry travel on the isolated CAN bus.
-
 ---
 
 ## 6. Dispenser and Liquid Drivers
 
-### 6.1 Dispenser Servo Block — PCA9685 + Switched 6.5 V Rail (FID + CID)
+### 6.1 Dispenser Servo Block — PCA9685 + Switched 6.0 V Rail (FID + CID)
 
 ```
-I2C1 (PA15/PB7) ──► PCA9685PW (addr 0x41, A0 = 1)
-   PB4 ──► OE (active-low; 10k pull-up → outputs off until the STM32 drives it low)
+I2C3 (J_AP 16/18) ──► PCA9685PW (addr 0x41, A0 = 1)
+   RV1106 GPIO ──► OE (active-low; 10k pull-up → outputs off until epicurad drives it low)
    CH0 ──► 100R ──► J_DSB1 SIG    C1  CID carousel index servo   (DS3218 270°)
    CH1 ──► 100R ──► J_DSB2 SIG    F1  FID carousel index servo   (MG996R)
    CH2 ──► 100R ──► J_DSB3 SIG    F2  FID dose servo, ¼ tsp wheel (MG996R)
    CH3 ──► 100R ──► J_DSB4 SIG    F3  FID steam-gate servo       (MG90S)
    CH4–CH15 unused (test pads)
 
-6.5 V (MP1584EN #2) ──► Q_DSB (AO3401, high-side) ──► 3 A PTC ──► 1000 µF ──┬── J_DSB1-3 V+ (6.5 V)
-                          gate ◄── 2N7002 ◄── PCF8574 #2 P4 (rail enable)     └── D_DSB4 (M7 / 1N4007, SMA) ──► J_DSB4 V+ (≈ 5.8 V)
+6.0 V (MP1584EN #2 from VSYS) ──► Q_DSB (AO3401, high-side) ──► 3 A PTC ──► R_SH1 (10 mΩ, INA219 #1) ──► 1000 µF ──┬── J_DSB1-4 V+ (6.0 V)
+                                   gate ◄── 2N7002 ◄── PCF8574 #2 P4 (rail enable)                                ├── TB6612 VM
+                                                                                                                  └── J_SLD 6V_SOL1 / 6V_SOL2
 ```
 
 | Parameter | Value |
 |-----------|-------|
-| PWM driver | PCA9685PW (TSSOP-28), 16 ch, 12-bit, 50 Hz; EXTCLK not used; V+ pin left unconnected (servo power goes directly from the switched rail to J_DSB) |
+| PWM driver | PCA9685PW (TSSOP-28), 16 ch, 12-bit, 50 Hz; EXTCLK not used; V+ pin left unconnected (servo power goes directly from the switched rail to J_DSB); Linux `pwm-pca9685` |
 | Servo signal | 500–2,500 µs, 3.3 V logic (DS3218, MG996R and MG90S all accept 3.3 V) |
-| Rail | 6.5 V / 3 A, switched on for the duration of a dispense; one servo moves at a time (firmware mutex) |
-| Connectors | J_DSB1–4: 3-pin JR/Futaba servo headers (SIG / V+ / GND), 2.54 mm, keyed, 300 mm extension leads; J_DSB4 V+ through D_DSB4 (series M7 / 1N4007, ≈ 0.7 V drop) because the MG90S is rated 4.8–6.0 V |
-| Fault detection | INA219 24 V current window during moves + 3 s move timeout + PCA9685 I2C NACK → DSB_STALL |
-| Safe state | OE high and rail off at boot, on E-stop and on heartbeat loss (servos limp) |
+| Rail | 6.0 V / 3 A, switched on for the duration of a dispense; one servo moves at a time (`dispense` thread mutex); the MG90S no longer needs D_DSB4 |
+| Connectors | J_DSB1–4: 3-pin JR/Futaba servo headers (SIG / V+ / GND), 2.54 mm, keyed, 300 mm extension leads |
+| Fault detection | INA219 #1 current window on 6V_DSP during moves (> 2.5 A for 300 ms) + 3 s move timeout + PCA9685 I2C NACK → retry once (back off 10°) → DSB_STALL, detected by the RV1106 |
+| Safe state | OE high and rail off at boot, on E_STOP, on UNIT_LIFTED and while the RV1106 is in reset (servos limp) |
 
 ### 6.2 SLD Peristaltic Pumps (2x) — TB6612FNG
 
 ```
-12V Rail ──── VM (TB6612FNG)
-   PWMA ◄── PC3 (100R)   AIN1 ◄── PC4 (100R)   AIN2 ── GND     AO1/AO2 ──► J_SLD 1/2 (oil pump)
-   PWMB ◄── PC5 (100R)   BIN1 ◄── PC6 (100R)   BIN2 ── GND     BO1/BO2 ──► J_SLD 3/4 (water pump)
+6V_DSP ──── VM (TB6612FNG)
+   PWMA ◄── RV1106 PWM_PUMP_OIL (100R)     AIN1 ◄── PCF8574 #2 P3   AIN2 ── GND   AO1/AO2 ──► J_SLD 1/2 (oil pump)
+   PWMB ◄── RV1106 PWM_PUMP_WATER (100R)   BIN1 ◄── PCF8574 #2 P5   BIN2 ── GND   BO1/BO2 ──► J_SLD 3/4 (water pump)
    STBY ◄── 3.3V (10k)   VCC ── 3.3V            C_VM: 100 nF + 10 µF
 ```
 
 | Parameter | Value |
 |-----------|-------|
-| IC | TB6612FNG (SSOP-24), VM 12 V, VCC 3.3 V |
-| Current | 1.2 A continuous / 3.2 A peak per channel; pumps draw ~0.6 A |
-| Pull-downs | 10k on PWMA/PWMB (pumps off during boot) |
+| IC | TB6612FNG (SSOP-24), VM = 6V_DSP (6.0 V), VCC 3.3 V |
+| Pumps | Re-specified to 6 V DC peristaltic, ~0.6 A each |
+| Current | 1.2 A continuous / 3.2 A peak per channel |
+| Pull-downs | 10k on PWMA/PWMB (pumps off during boot); direction bits default low on the PCF8574 (forward) |
+
+Pumps run only while 6V_DSP is enabled, so an idle or lifted DU cannot pump even if a PWM line is mis-driven.
 
 ### 6.3 SLD Solenoid Valves (2x)
 
-Two 12 V normally-closed valves (drip prevention), low-side switched by IRLML6344 with SS14 flyback, 100R gate resistor and 10k gate pull-down, gates driven from PCF8574 #2 P0 (oil) and P1 (water).
+Two 6 V normally-closed valves (drip prevention) on 6V_DSP, low-side switched by IRLML6344 with SS14 flyback, 100R gate resistor and 10k gate pull-down, gates driven from PCF8574 #2 P0 (oil) and P1 (water). Re-specified from 12 V to 6 V so that no 12 V load remains on the board.
 
-### 6.4 SLD Reservoir Load Cells (2x) — HX711
-
-Two 2 kg load cells with external HX711 breakout boards, powered at 3.3 V from J_SLD and bit-banged by the STM32: oil on PC11 (SCK) / PC12 (DOUT), water on PC9 / PC10. 100R series resistors on all four lines; 10 Hz sampling (RATE low); ±1 g with averaging.
-
-### 6.5 Exhaust Fans (2x)
-
-Two 120 mm 12 V fans, low-side PWM at 25 kHz via IRLML6344 + SS14 flyback: fan 1 on PA6 (TIM3_CH1), fan 2 on PB10 (TIM2_CH3). Both independently controllable.
-
-### 6.6 LED Ring (WS2812B) Driver
+### 6.4 SLD Reservoir Load Cells (2x) — NAU7802 via TCA9543A
 
 ```
-PB14 (TIM15_CH1, PWM + DMA, 800 kHz bit stream) ──► 74AHCT1G125 (3.3 → 5 V, OE tied low) ──► 33R ──► J_LED pin 2 (DATA)
-5V_MAIN ──► Q_LED_P (SI2301, high-side) ──► J_LED pin 1 (5V_SW)   gate ◄── Q_LED_N (2N7002) ◄── PCF8574 #2 P3
+I2C3 ──► TCA9543A (0x71) ──┬── ch0 ──► NAU7802 (0x2A) oil   ── AVDD/AVSS ──► J_SLD 9/10 (E+/E−); VIN+/VIN− ◄── J_SLD 11/12 (S+/S−)
+                           └── ch1 ──► NAU7802 (0x2A) water ── AVDD/AVSS ──► J_SLD 13/14 (E+/E−); VIN+/VIN− ◄── J_SLD 15/16 (S+/S−)
 ```
 
-The ring (12–16 LEDs, ~1 A full white) is driven by the STM32, not the RV1106; the RV1106 requests OFF / CAPTURE / NIGHT modes over CAN (SET_LED 0x220). Default OFF (10k pull-up on the P-MOSFET gate).
+| Parameter | Value |
+|-----------|-------|
+| ADC | NAU7802SGI (SOIC-16), 24-bit, PGA up to 128, internal LDO (3.0 V) used as bridge excitation, 10–320 SPS; Linux `nau7802` (IIO) |
+| Mux | TCA9543A (TSSOP-14), 2 channels, because both NAU7802 share the fixed address 0x2A; Linux `i2c-mux-pca954x` |
+| Load cells | 2x 2 kg bridge cells (oil and water reservoirs), 4-wire, excited and read on the PCB — the HX711 breakout boards of v3.x are gone |
+| Sampling | 10 SPS per cell, ±1 g with averaging; the `dispense` thread closes the SLD loop at 10 Hz and stops at 95 % of target |
+| Fault | I2C NACK or no data-ready → SLD_LOAD_CELL_DRIFT / SLD_DISPENSE_ERROR, RV1106-detected |
+
+Bridge wiring on J_SLD is twisted and short (< 30 cm); keep the NAU7802 analog pins away from the 6V_DSP switch and the bucks.
+
+### 6.5 Exhaust Fans — removed
+
+The two 120 mm fans, their MOSFETs and J_FAN are on the CSC (STM32 PA6 / PB10, 12 V rail); the RV1106 sets the exhaust stage over CAN (SET_EXHAUST 0x260, Exhaust §3.4).
+
+### 6.6 White LED Ring Driver
+
+```
+5V_MAIN ──► J_LED pin 1 (5V)  ──► ring (12–16 white LEDs, 5000 K, CRI ≥ 90, ≤ 1 A) ──► J_LED pin 2 (LED_RET) ──► Q_LED (IRLML6344, low-side) ──► GND
+                                                                                       gate ◄── 100R ◄── RV1106 PWM_LED (1 kHz), 10k pull-down
+```
+
+The ring is a plain white ring with series resistors or a constant-current strip, mounted on the DU underside around the camera window; brightness is the RV1106 PWM duty (OFF 0 %, CAPTURE 100 %, NIGHT 30 %). No colour control, no WS2812B, no level shifter and no SET_LED CAN command any more.
 
 ### 6.7 Piezo Buzzer
 
-5 V active piezo via 2N7002 low-side switch, gate from PC7 (TIM8_CH2) through 100R with 10k pull-down; J_BUZZER 2-pin.
+5 V active piezo via 2N7002 low-side switch, gate from the RV1106 PWM_BUZZER through 100R with 10k pull-down; J_BUZZER 2-pin.
 
-### 6.8 USB-C Programming Port
+### 6.8 USB-C Programming Port — removed
 
-Unchanged from v2: 16-pin mid-mount USB-C, 5.1k CC pull-downs, USBLC6-2SC6 ESD, 22R series on D+/D−, 500 mA VBUS polyfuse → 5V_USB → D_OR2, VBUS detect divider → PC0, SW_BOOT on BOOT0 for DFU. Powers the STM32 alone for bench work.
+There is no STM32 to program. The Pico Zero's own USB-C port serves the RV1106 (console, mass storage, `rkdeveloptool`); the CSC carries the USB-C DFU port for the STM32.
 
 ---
 
-## 7. CAN Ports
+## 7. CAN Node
 
-The board has two electrically separate CAN buses on two STM32 FDCAN controllers. They never share a transceiver, a termination or a connector.
+The board carries **one** CAN node, the RV1106's, on the isolated 500 kbps bus shared with the STM32 (on the CSC) and the heating unit. The bus and its isolated supply arrive over dock pads 3–6; nothing else on this board is on a CAN bus.
 
-| | Isolated port — cooking surface | Regular port — stirring motor |
-|---|---|---|
-| Connector | J_CAN_HEAT (JST-XH 4-pin) | J_CAN_STIR (JST-XH 3-pin) + J_STIR_PWR (XT30) |
-| STM32 controller | FDCAN1, PB8/PB9 | FDCAN2, PB12/PB13 |
-| Transceivers | ISO1050DUB #1 (STM32) and ISO1050DUB #2 (RV1106 via MCP2518FD), 5 kV RMS, in one isolated 5V_ISO domain | SN65HVD230 (3.3 V, non-isolated) |
-| Nodes | STM32, RV1106, induction surface MCU | STM32, stirring motor controller |
-| Bit rate | 500 kbps, classic CAN 2.0B, 11-bit IDs | 1 Mbps, classic CAN 2.0B, 29-bit IDs as the motor protocol requires |
-| Termination | 120 Ω on the isolated side at J_CAN_HEAT (both on-board nodes are a short stub); 120 Ω inside the module | 120 Ω at J_CAN_STIR; 120 Ω in or at the motor (verify the motor's built-in termination) |
-| Ground | GND_ISO only; shield to GND_ISO at the PCB end | System GND (motor shares the 24 V PSU) |
-| Traffic | Host commands/telemetry (RV1106 ↔ STM32), heater setpoint and status, heartbeat, E_STOP — ID map in [[../03-Software/02-Controller-Software-Architecture#7.2 Message Types\|Controller Software Architecture §7.2]] | Motor enable/disable, velocity (and position for homing) commands at 50 Hz; feedback: velocity, position, current, temperature, fault flags |
+| | RV1106 node (this board) |
+|---|---|
+| Connector | J_DOCK pads 3 (CAN_H), 4 (CAN_L), 5 (GND_ISO), 6 (5V_ISO) |
+| Controller | MCP2518FD on J_AP SPI0 CS1 (§7.2) |
+| Transceiver | ISO1050DUB #2, 5 kV RMS; logic side on 3.3 V / GND, bus side on the dock's 5V_ISO / GND_ISO |
+| Other nodes | STM32 (ISO1050DUB #1 on the CSC), heating unit MCU (its own transceiver) |
+| Bit rate | 500 kbps, classic CAN 2.0B, 11-bit IDs |
+| Termination | None on this board: 120 Ω on the CSC at J_CAN_HEAT and 120 Ω inside the heating unit. The dock → this board run is a stub ≤ 30 cm |
+| Ground | GND_ISO only on the isolated island; the DU logic ground joins the CS ground only through dock pad 2 |
+| Traffic | Host commands/telemetry (RV1106 ↔ STM32), heater setpoint and status, heartbeat, E_STOP, STM32 firmware update (0x7E0/0x7E8) — ID map in [[../03-Software/02-Controller-Software-Architecture#7.2 Message Types\|Controller Software Architecture §7.2]] |
 
-### 7.1 Isolated Port — ISO1050DUB x2 + B0505S
+Lifting the DU opens the bus and the 24 V at the same instant: the heating unit drops to zero ≤ 1 s after its last keep-alive, the STM32 enters safe hold on DOCK_SENSE_B, and this node simply sees bus-off until re-docked.
+
+### 7.1 Isolated Transceiver — ISO1050DUB #2 on the Dock Supply
 
 ```
-PB9 (FDCAN1_TX) ──► TXD ┐  ISO1050DUB #1  ┌── CANH ─┐
-PB8 (FDCAN1_RX) ◄── RXD ┘  VCC1 3.3V / GND │  CANL ─┤
-                            VCC2 5V_ISO / GND_ISO              ├── R_TERM1 (120R) ── J_CAN_HEAT 1 (CANH), 2 (CANL)
-MCP2518FD TXCAN ──► TXD ┐  ISO1050DUB #2  ┌── CANH ─┤          J_CAN_HEAT 3 GND_ISO, 4 5V_ISO (F_CAN 100 mA)
-MCP2518FD RXCAN ◄── RXD ┘  VCC1 3.3V / GND │  CANL ─┘
-                            VCC2 5V_ISO / GND_ISO
-                  ─── 6 mm milled slot under both ISO1050 and the B0505S output ───
+MCP2518FD TXCAN ──► TXD ┐  ISO1050DUB #2  ┌── CANH ─┬── PESD1CAN ── J_DOCK pad 3 (CAN_H)
+MCP2518FD RXCAN ◄── RXD ┘  VCC1 3.3V / GND │  CANL ─┴────────────── J_DOCK pad 4 (CAN_L)
+                            VCC2 5V_ISO / GND_ISO ◄── J_DOCK pads 6 / 5 (10 µF + 100 nF)
+                  ─── 6 mm milled slot under the ISO1050 #2 and around dock pads 3–6 ───
 ```
 
-- Both transceivers sit on the system-ground side of the slot with their bus pins crossing into the isolated island; no other copper crosses the boundary (creepage ≥ 6.4 mm, IEC 60335 reinforced).
-- Decoupling per transceiver: 100 nF on VCC1, 100 nF + 10 µF on VCC2.
-- Shielded twisted pair ≤ 1 m to the module.
+- The transceiver sits on the system-ground side of the slot with its bus pins crossing into the isolated island; no other copper crosses the boundary (creepage ≥ 6.4 mm, IEC 60335 reinforced).
+- Decoupling: 100 nF on VCC1, 100 nF + 10 µF on VCC2.
+- The isolated island contains only ISO1050 #2's bus side, PESD1CAN and dock pads 3–6.
 
 ### 7.2 RV1106 CAN Node — MCP2518FD
 
@@ -680,27 +601,20 @@ MCP2518FD RXCAN ◄── RXD ┘  VCC1 3.3V / GND │  CANL ─┘
 | Supply | 3.3 V, 100 nF + 10 µF |
 | Driver | Linux `mcp251xfd` → SocketCAN `can0` at 500 kbps |
 
-### 7.3 Regular Port — SN65HVD230
+### 7.3 Regular Port — moved
 
-```
-PB13 (FDCAN2_TX) ──► D  ┐ SN65HVD230 (SOIC-8, 3.3 V)  ┌── CANH ──┬── R_TERM2 (120R) ──┬── J_CAN_STIR 1 (CANH)
-PB12 (FDCAN2_RX) ◄── R  ┘ Rs ── 10k to GND (slope ctl) └── CANL ──┘                    └── J_CAN_STIR 2 (CANL)
-                                                                                           J_CAN_STIR 3 (GND)
-PESD1CAN (ESD) across CANH/CANL; 100 nF on VCC
-```
-
-| Parameter | Value |
-|-----------|-------|
-| Transceiver | SN65HVD230DR, 3.3 V, up to 1 Mbps |
-| Bit rate | 1 Mbps (motor protocol default); FDCAN2 nominal bit timing from the 170 MHz kernel clock |
-| Cable | Twisted pair ≤ 1 m to the motor on the gantry, routed with the 24 V_STIR pair |
-| Fail-safe | Motor firmware command timeout (≤ 500 ms) must be configured so a silent bus stops the arm; Q_STIR (§4.8) removes 24 V independently |
+The SN65HVD230, J_CAN_STIR, Q_STIR and J_STIR_PWR are on the CSC (STM32 FDCAN2, 1 Mbps) and reach the stirring motor through the J_SU harness inside the right pillar; see [[02-Cooking-Surface-Controller|Cooking Surface Controller]] §6.
 
 ---
 
-## 8. Current Monitoring — INA219
+## 8. Current Monitoring — INA219 x2
 
-INA219 on the 24 V input rail (10 mΩ 2512 shunt, I2C 0x40): power telemetry, DSB stall window during carousel moves, and plausibility check of the stir motor's own current report. Unchanged from v2.
+| Ref | I2C3 address | Shunt | Measures | Use |
+|-----|--------------|-------|----------|-----|
+| INA219 #1 | 0x40 | 10 mΩ 2512 in the switched 6V_DSP rail (after the PTC) | Rail voltage and servo / pump / solenoid current | DSB stall window (> 2.5 A for 300 ms) during carousel moves; pump no-flow plausibility; dispenser power telemetry. Moved from the 24 V input of v3.x |
+| INA219 #2 | 0x44 | 10 mΩ 2512 in the BAT+ path between J_BAT and D_SYS2 | Pack voltage (bus input on BAT+), signed pack current | State of charge, charging / discharging, 6.4 V warning and 6.2 V halt; replaces the STM32 ADC divider |
+
+Both are read by `epicurad` through the Linux `ina2xx` hwmon driver (1 Hz for the pack, 50 Hz while a dispense is active).
 
 ---
 
@@ -708,102 +622,85 @@ INA219 on the 24 V input rail (10 mΩ 2512 shunt, I2C 0x40): power telemetry, DS
 
 ### 9.1 ESD Protection
 
-- PRTR5V0U2X on J_SAFE inputs and J_LED data; PESD1CAN on J_CAN_STIR (J_CAN_HEAT is protected by the transceiver's isolation rating plus a PESD1CAN on the isolated side)
-- USBLC6-2SC6 on USB D+/D−
-- 33R series resistors on J_LCD and J_LED logic lines
+- 33R series resistors on J_LCD and the four PWM / three GPIO lines leaving the Pico Zero to the drivers
+- PRTR5V0U2X on the J_SLD bridge sense lines (the load cells are off-board, in the reservoir bays)
+- The relay, E-stop and pot inputs (J_SAFE) and the USB port are on the CSC; their ESD parts go with them
 
-### 9.2 Relay Driver (Q_RLY)
+### 9.2 Dock Pad ESD and Hot-Plug
 
-PB0 → 330R → 2N7002 → Omron G5V-2 coil (12 V) with 1N4148 flyback; relay cuts AC to the induction surface. NC wiring: relay de-energised = heater disconnected.
+The dock pads are the only contacts a user touches with the DU in hand (cleaning, loading):
 
-### 9.3 E-Stop Input
+- **PESD1CAN** across CAN_H / CAN_L on the isolated island (pads 3–4)
+- **SMBJ24A** on DOCK_24V (pad 1) plus 10 µF 50 V, against the hot-plug transient when the CSC closes Q_DOCK
+- 10 µF + 100 nF on 5V_ISO (pad 6)
+- DOCK_SENSE_A (pad 7) and DOCK_PWR_OK: 100R series + 10k pull-up into the RV1106 GPIO; DOCK_SENSE_B (pad 8) is tied to GND through a 0R link
+- Pads 1–2 and 3–6 are ≥ 6.4 mm apart on the pad pattern so the isolation holds across the connector
 
-NC button on J_SAFE pin 3 → PB2 (EXTI) with 10k pull-up and 100 nF; pressed or wire-broken = LOW = stop.
+### 9.3 MOSFET Gate Safety
 
-### 9.4 Pot Detection Input (backup)
+Every MOSFET gate and driver enable has a 100R series resistor and a 10k pull-down (or pull-up for the P-MOSFET Q_DSB and the PCA9685 OE) so that all actuators, the 6V_DSP rail, the LED ring and the buzzer are off while the RV1106 is booting, in reset or unpowered. The PCF8574 #2 outputs are high-impedance (pulled low by the gate resistors) until `epicurad` writes them.
 
-Reed switch on J_SAFE pin 2 → PB1 with 10k pull-up. Primary pot detection is the module's own, reported in HEAT_STATUS; the reed switch is an optional cross-check.
-
-### 9.5 MOSFET Gate Safety
-
-Every MOSFET gate and driver enable has a 100R series resistor and a 10k pull-down (or pull-up for P-MOSFET switches) so that all actuators, both power switches (Q_DSB, Q_STIR), the LED ring and the relay are off while the STM32 is in reset or unpowered.
+Relay driver, E-stop input and pot-detection input: on the CSC (see [[02-Cooking-Surface-Controller|Cooking Surface Controller]] §8).
 
 ---
 
-## 10. Connector Definitions (19 total)
+## 10. Connector Definitions (11 total)
 
 | Ref | Type | Function |
 |-----|------|----------|
 | J_AP | 2x20 socket, 2.54 mm, 8.5 mm stacking | Luckfox Pico Zero slot |
 | J_LCD | 1x14 header, 2.54 mm | 4" ST7796S + FT6336 display |
-| J_24V_IN | XT30 2-pin | 24 V DC input |
+| J_DOCK | 8 flat gold pads, 2.54 mm pitch, bottom side at the board edge | Dock to the CS left pillar: charge 24 V, isolated CAN, 5V_ISO, dock sense |
 | J_BAT | JST-XH 2.5 mm 3-pin | 2S Li-ion pack: B+, B−, NTC |
-| J_CAN_HEAT | JST-XH 2.5 mm 4-pin | Isolated CAN to the cooking surface |
-| J_CAN_STIR | JST-XH 2.5 mm 3-pin | Regular CAN to the stirring motor |
-| J_STIR_PWR | XT30 2-pin | Switched 24 V to the stirring motor |
 | J_DSB1–J_DSB4 | 3-pin servo header, 2.54 mm | C1, F1, F2, F3 servos |
-| J_SLD | Hirose DF11-16DP-2DS (2x8, 2.0 mm) | SLD pumps, solenoids, two HX711 |
-| J_FAN | JST-XH 2.5 mm 4-pin | Two exhaust fans |
-| J_LED | JST-XH 2.5 mm 3-pin | WS2812B ring: 5V_SW, DATA, GND |
+| J_SLD | Hirose DF11-16DP-2DS (2x8, 2.0 mm) | SLD pumps, solenoids, two load-cell bridges |
+| J_LED | JST-XH 2.5 mm 2-pin | White ring: 5V, LED_RET |
 | J_BUZZER | JST-PH 2.0 mm 2-pin | Piezo buzzer |
-| J_SAFE | Hirose DF11-4DP-2DS (2x2) | Relay drive, pot detect, E-stop, GND |
-| J_SWD | 2x5 1.27 mm | Cortex debug |
-| J_USB | USB-C 16-pin mid-mount | STM32 DFU / CDC |
 
-Removed since v2: J_CM5 (replaced by J_AP), J_12V_UPS, J_BLDC, J_PASD, J_PRES, J_CID, J_IR_LED (replaced by J_LED), single-cell J_BAT (replaced by the 3-pin 2S J_BAT).
+Removed since v3.x (all now on the CSC): J_24V_IN, J_CAN_HEAT, J_CAN_STIR, J_STIR_PWR, J_FAN, J_SAFE, J_SWD, J_USB. Removed since v2: J_CM5 (replaced by J_AP), J_12V_UPS, J_BLDC, J_PASD, J_PRES, J_CID, J_IR_LED (replaced by J_LED), single-cell J_BAT (replaced by the 3-pin 2S J_BAT).
 
 ### 10.1 J_AP — see §5.2
 
 ### 10.2 J_LCD — see §5.3
 
-### 10.3 J_24V_IN — 24 V DC Power Input (XT30)
+### 10.3 J_DOCK — Dock Pads to the Cooking Surface (8 pads, 2.54 mm pitch, DU view)
 
-| Pin | Signal | Notes |
-|-----|--------|-------|
-| 1 | +24V | From Mean Well LRS-75-24 |
-| 2 | GND | Power ground |
+| Pad | Signal | Direction | Notes |
+|-----|--------|-----------|-------|
+| 1 | DOCK_24V | In (CS → DU) | Charge input; switched on the CSC by Q_DOCK only while DOCK_SENSE_B is low, F_DOCK 2 A. SMBJ24A + 10 µF at the pad. Dead when the unit is lifted |
+| 2 | GND | — | Charge return; ties the DU logic ground to the CS ground while docked |
+| 3 | CAN_H | bus | Isolated 500 kbps bus (same bus as the heating unit); PESD1CAN |
+| 4 | CAN_L | bus | |
+| 5 | GND_ISO | — | Isolated bus ground; ISO1050 #2 GND2 |
+| 6 | 5V_ISO | In (CS → DU) | From the B0505S-1WR3 on the CSC (F_CAN 100 mA); ISO1050 #2 VCC2 |
+| 7 | DOCK_SENSE_A | In (CS → DU) | Tied to GND on the CS; 10k pull-up here → RV1106 GPIO; low = docked |
+| 8 | DOCK_SENSE_B | Out (DU → CS) | Tied to GND here; 10k pull-up on the CSC → STM32 PB3; low = DU present (enables Q_DOCK) |
+
+The mating part is an 8-contact magnetic pogo connector: spring pins (2 A each) in a keyed recess on top of the CS left pillar, flat pads on the DU underside, so the DU can only seat one way. The pad pattern is on L4 (bottom) at the board edge over the pillar; pads 3–6 sit on the isolated island (§11.2).
 
 ### 10.4 J_BAT — 2S Li-ion Pack (JST-XH 2.5 mm, 3-pin)
 
 | Pin | Signal | Notes |
 |-----|--------|-------|
-| 1 | B+ | Pack positive (6.0–8.4 V) through the pack PCM; to TP5100 BAT, D_SYS2 and the PC1 divider |
+| 1 | B+ | Pack positive (6.0–8.4 V) through the pack PCM; to TP5100 BAT, R_SH2 (INA219 #2) and D_SYS2 |
 | 2 | B− | Pack negative = GND |
 | 3 | NTC | 10 kΩ NTC on the cells → TP5100 TEMP |
 
 > [!warning]
-> Use only a pack with an integrated 2S protection module and IEC 62133-2 / IS 16046 certified cells. Mount it in the enclosure's cool zone (< 45 °C), never above or beside the induction module or the PSU.
+> Use only a pack with an integrated 2S protection module and IEC 62133-2 / IS 16046 certified cells. The pack lives in the DU, away from the heating unit and the PSU; keep it clear of the LED ring and the camera window.
 
-### 10.5 J_CAN_HEAT — Isolated CAN to the Cooking Surface (JST-XH 2.5 mm, 4-pin)
+### 10.5 J_CAN_HEAT — moved to the CSC
 
-| Pin | Signal | Notes |
-|-----|--------|-------|
-| 1 | CAN_H | Isolated bus |
-| 2 | CAN_L | Isolated bus |
-| 3 | GND_ISO | Isolated ground (NOT system GND); cable shield lands here |
-| 4 | 5V_ISO | Optional isolated 5 V for an external node, F_CAN 100 mA polyfuse |
+### 10.6 J_CAN_STIR — moved to the CSC
 
-### 10.6 J_CAN_STIR — Regular CAN to the Stirring Motor (JST-XH 2.5 mm, 3-pin)
-
-| Pin | Signal | Notes |
-|-----|--------|-------|
-| 1 | CAN_H | Non-isolated, 1 Mbps |
-| 2 | CAN_L | |
-| 3 | GND | System ground reference for the motor's CAN transceiver |
-
-### 10.7 J_STIR_PWR — Stirring Motor Power (XT30)
-
-| Pin | Signal | Notes |
-|-----|--------|-------|
-| 1 | 24V_STIR | Switched by Q_STIR, 5 A polyfuse |
-| 2 | GND | Power ground |
+### 10.7 J_STIR_PWR — moved to the CSC
 
 ### 10.8 J_DSB1–J_DSB4 — Dispenser Servos (3-pin servo header, 2.54 mm)
 
 | Pin | Signal | Notes |
 |-----|--------|-------|
 | 1 | SIG | PCA9685 CHn via 100R |
-| 2 | V+ | Switched 6.5 V DSB rail (J_DSB1–3); J_DSB4 via D_DSB4, ≈ 5.8 V |
+| 2 | V+ | Switched 6.0 V rail (6V_DSP), all four headers; no series diode |
 | 3 | GND | Ground |
 
 J_DSB1 = C1 (CID index, DS3218 270°), J_DSB2 = F1 (FID index, MG996R), J_DSB3 = F2 (FID dose, MG996R), J_DSB4 = F3 (FID steam gate, MG90S).
@@ -812,62 +709,46 @@ J_DSB1 = C1 (CID index, DS3218 270°), J_DSB2 = F1 (FID index, MG996R), J_DSB3 =
 
 | Pin | Signal | Notes |
 |-----|--------|-------|
-| 1 | PUMP1_AO1 | TB6612 A1 (oil pump +) |
+| 1 | PUMP1_AO1 | TB6612 A1 (oil pump +, 6 V) |
 | 2 | PUMP1_AO2 | TB6612 A2 (oil pump −) |
-| 3 | PUMP2_BO1 | TB6612 B1 (water pump +) |
+| 3 | PUMP2_BO1 | TB6612 B1 (water pump +, 6 V) |
 | 4 | PUMP2_BO2 | TB6612 B2 (water pump −) |
-| 5 | 12V_SOL1 | Oil solenoid supply |
+| 5 | 6V_SOL1 | Oil solenoid supply (6V_DSP) |
 | 6 | SOL1_OUT | Oil solenoid drain (IRLML6344, PCF8574 #2 P0) |
-| 7 | 12V_SOL2 | Water solenoid supply |
+| 7 | 6V_SOL2 | Water solenoid supply (6V_DSP) |
 | 8 | SOL2_OUT | Water solenoid drain (IRLML6344, PCF8574 #2 P1) |
-| 9, 10 | Reserved | |
-| 11 | 3.3V | HX711 supply (both boards) |
-| 12 | GND | HX711 ground |
-| 13 | HX711_OIL_SCK | PC11 |
-| 14 | HX711_OIL_DOUT | PC12 |
-| 15 | HX711_WATER_SCK | PC9 |
-| 16 | HX711_WATER_DOUT | PC10 |
+| 9 | LC_OIL_E+ | Oil cell excitation + (NAU7802 oil AVDD, 3.0 V) |
+| 10 | LC_OIL_E− | Oil cell excitation − (NAU7802 oil AVSS) |
+| 11 | LC_OIL_S+ | Oil cell signal + (NAU7802 oil VIN1P) |
+| 12 | LC_OIL_S− | Oil cell signal − (NAU7802 oil VIN1N) |
+| 13 | LC_WATER_E+ | Water cell excitation + (NAU7802 water AVDD) |
+| 14 | LC_WATER_E− | Water cell excitation − (NAU7802 water AVSS) |
+| 15 | LC_WATER_S+ | Water cell signal + (NAU7802 water VIN1P) |
+| 16 | LC_WATER_S− | Water cell signal − (NAU7802 water VIN1N) |
 
-### 10.10 J_FAN — Exhaust Fans (JST-XH 4-pin)
+Pins 9–16 are the two bridge cables (twisted pairs, shield to GND at the PCB end); the HX711 digital lines of v3.x are gone.
 
-| Pin | Signal | Notes |
-|-----|--------|-------|
-| 1 | 12V_FAN1 | Fan 1 supply |
-| 2 | FAN1_OUT | Fan 1 drain (PA6 PWM) |
-| 3 | 12V_FAN2 | Fan 2 supply |
-| 4 | FAN2_OUT | Fan 2 drain (PB10 PWM) |
+### 10.10 J_FAN — moved to the CSC
 
-### 10.11 J_LED — WS2812B Ring (JST-XH 3-pin)
+### 10.11 J_LED — White Ring (JST-XH 2-pin)
 
 | Pin | Signal | Notes |
 |-----|--------|-------|
-| 1 | 5V_SW | Switched 5 V (Q_LED_P, PCF8574 #2 P3) |
-| 2 | DATA | 74AHCT1G125 output via 33R, 800 kHz |
-| 3 | GND | |
+| 1 | 5V | 5V_MAIN (unswitched) |
+| 2 | LED_RET | Ring return → Q_LED drain (IRLML6344, RV1106 PWM_LED) |
 
 ### 10.12 J_BUZZER — Piezo Buzzer (JST-PH 2-pin)
 
 | Pin | Signal |
 |-----|--------|
 | 1 | 5V |
-| 2 | BUZZ_OUT (2N7002 drain, PC7 PWM) |
+| 2 | BUZZ_OUT (2N7002 drain, RV1106 PWM_BUZZER) |
 
-### 10.13 J_SAFE — Safety I/O (Hirose DF11-4DP-2DS)
+### 10.13 J_SAFE — moved to the CSC
 
-| Pin | Signal | STM32 Pin | Notes |
-|-----|--------|-----------|-------|
-| 1 | RELAY_DRV | PB0 via Q_RLY | Safety relay coil (12 V) |
-| 2 | POT_DET | PB1 | Reed switch, 10k pull-up (backup) |
-| 3 | E_STOP | PB2 | NC button, 10k pull-up, RC debounce |
-| 4 | GND | GND | |
+### 10.14 J_SWD — moved to the CSC
 
-### 10.14 J_SWD — SWD Debug (2x5, 1.27 mm)
-
-Standard Cortex debug pinout: VCC 3.3 V, SWDIO (PA13), SWCLK (PA14), SWO (PB3, optional), NRST, GND.
-
-### 10.15 J_USB — USB-C 2.0 (16-pin mid-mount)
-
-VBUS → F_USB → 5V_USB; CC1/CC2 5.1k to GND; D+/D− → USBLC6 → 22R → PA12/PA11. SuperSpeed and SBU pins unconnected.
+### 10.15 J_USB — moved to the CSC
 
 ---
 
@@ -878,56 +759,54 @@ VBUS → F_USB → 5V_USB; CC1/CC2 5.1k to GND; D+/D− → USBLC6 → 22R → P
 | Layer | Function | Copper |
 |-------|----------|--------|
 | L1 (Top) | Components + signal | 2 oz |
-| L2 | Continuous GND plane (only break: CAN isolation slot) | 1 oz |
-| L3 | Split power plane: 5V/3.3V, 12V, 24V/VSYS | 1 oz |
-| L4 (Bottom) | Signal + power traces, passives under the Pico Zero | 2 oz |
+| L2 | Continuous GND plane (only break: CAN isolation slot at the dock edge) | 1 oz |
+| L3 | Split power plane: 5V/3.3V, 6V_DSP, VSYS/BAT+ (12 V is a local trace) | 1 oz |
+| L4 (Bottom) | Signal + power traces, passives under the Pico Zero, J_DOCK pad pattern | 2 oz |
 
-FR-4 Tg ≥ 150 °C, 1.6 mm, ENIG.
+FR-4 Tg ≥ 150 °C, 1.6 mm, ENIG (hard gold on the eight dock pads if the fab offers it).
 
 ### 11.2 Board Layout Zones
 
 ```
-┌──────────────────────────────── 160 mm ────────────────────────────────┐
-│ ZONE A: AP SLOT + DIGITAL           │ ZONE B: COMMS      │ ZONE C: POWER IN │
-│ ┌─────────────────────────────┐     │ MCP2518FD + Y3     │ J_24V_IN  XT30   │
-│ │ J_AP 2x20 + 4 standoffs     │     │ SN65HVD230         │ F1, SS54, TVS    │
-│ │ (Luckfox Pico Zero 65x30)   │     │ J_CAN_STIR  J_LCD  │ INA219 + shunt   │
-│ └─────────────────────────────┘     │ J_SWD  J_USB       │ D_SYS1/2 → VSYS  │ 90 mm
-│ STM32G474RE, crystals, AMS1117,     │ SW_BOOT  SW_RST    │ J_BAT  TP5100    │
-│ PCF8574 #2, PCA9685, Q_LED, D_OR1-2 │ 74AHCT1G125  J_LED │ L_CHG  CHG LEDs  │
-├─────────────────────────────────────┼────────────────────┼──────────────────┤
-│ ZONE D: ACTUATOR DRIVERS            │ ZONE E: SWITCHES   │ ZONE F: BUCKS    │
-│ TB6612FNG, 4x IRLML6344 + flybacks  │ Q_DSB, Q_STIR      │ MP1584EN #1, #2  │
-│ Q_RLY, Q_BUZZ, HX711 series Rs      │ PTC, 1000 µF       │ TPS54531 + L1-L3 │
-│ ┌── CAN ISOLATION (6 mm slot) ──────────────────┐        │ C_SYS 100 µF     │
-│ │ B0505S │ ISO1050 #1 │ ISO1050 #2 │ SLOT │ J_CAN_HEAT   │                  │
-│ └───────────────────────────────────────────────┘        └──────────────────┘
-│ J_DSB1-4   J_SLD   J_FAN   J_BUZZER   J_SAFE   J_STIR_PWR                      │
-└────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────── 160 mm ────────────────────────────────────────┐
+│ ZONE C: DOCK + CAN NODE     │ ZONE A: AP SLOT + DIGITAL              │ ZONE B: BATTERY  │
+│ ┌─ ISOLATED ISLAND ──────┐  │ ┌─────────────────────────────┐        │ J_BAT  R_SH2     │
+│ │ pads 3-6 │ ISO1050 #2  │  │ │ J_AP 2x20 + 4 standoffs     │        │ INA219 #2        │
+│ │ PESD1CAN │ (slot)      │  │ │ (Luckfox Pico Zero 65x30)   │        │ TP5100  L_CHG    │
+│ └────────────────────────┘  │ └─────────────────────────────┘        │ CHG LEDs         │ 90 mm
+│ pads 1-2, 7-8  SMBJ24A      │ MCP2518FD + Y3   AMS1117   PCF8574 #2  │ D_SYS1/2 → VSYS  │
+│ Q_PWR (DOCK_PWR_OK)         │ PCA9685  TCA9543A  2x NAU7802  INA219 #1│ C_SYS 100 µF     │
+├─────────────────────────────┼────────────────────────────────────────┼──────────────────┤
+│ J_LCD   J_LED   J_BUZZER    │ ZONE D: ACTUATOR DRIVERS               │ ZONE F: BUCKS    │
+│ Q_LED   Q_BUZZ              │ TB6612FNG, 2x IRLML6344 + flybacks     │ MP1584EN #1 (12V)│
+│                             │ Q_DSB, PTC, R_SH1, 1000 µF             │ MP1584EN #2 (6V) │
+│                             │ J_DSB1-4      J_SLD                    │ TPS54531 + L1-L3 │
+└─────────────────────────────┴────────────────────────────────────────┴──────────────────┘
+  ▲ board edge over the CS left pillar (J_DOCK pads on L4)
 ```
 
 Placement rationale:
-- **Zone A**: the Pico Zero sits on standoffs over the STM32 and I2C ICs; its SPI0 lines to the MCP2518FD (Zone B) and J_LCD are short (< 40 mm). Keep the module's antenna end at the board edge, away from Zone F.
-- **Zone C**: J_BAT and the TP5100 next to the 12 V input of the charger and the VSYS diodes; the battery cable leaves the board edge towards the cool compartment.
-- **Zone F**: three bucks ≥ 25 mm from the STM32 and the Pico Zero, thermal pours ≥ 400 mm² each.
-- **CAN isolation slot** along the bottom edge; J_CAN_HEAT is the only connector on the isolated island.
-- **J_CAN_STIR and J_STIR_PWR** adjacent so the motor harness is one bundle.
+- **Zone C** sits at the board edge that lies over the CS left pillar when the DU is seated: the eight J_DOCK pads are on L4 at that edge, with pads 3–6 inside the isolation island next to ISO1050 #2 and pads 1–2 / 7–8 outside it. The isolation slot is only around ISO1050 #2 and dock pads 3–6; it no longer runs along a whole board edge.
+- **Zone A**: the Pico Zero sits on standoffs over the I2C ICs; its SPI0 lines to the MCP2518FD (Zone C edge) and J_LCD are short (< 40 mm). Keep the module's antenna end at the board edge, away from Zone F. NAU7802 analog pins away from Q_DSB and the bucks.
+- **Zone B**: J_BAT, R_SH2, INA219 #2, the TP5100 and the VSYS diodes together; the battery cable leaves the board edge towards the pack bay in the DU.
+- **Zone F**: three bucks ≥ 25 mm from the Pico Zero and the NAU7802s, thermal pours ≥ 400 mm² each; the TP5100 pour ≥ 300 mm² for 1 A charge.
+- **J_DSB1–4 and J_SLD** on the lower edge, nearest the carousels and reservoir bays.
 
 ### 11.3 Critical Layout Rules
 
 | Rule | Specification | Rationale |
 |------|---------------|-----------|
-| CAN isolation | Creepage ≥ 6.4 mm GND ↔ GND_ISO; 6 mm milled slot; no copper crossing | IEC 60335 reinforced insulation |
-| Two CAN buses | Stub lengths < 30 mm, 120 Ω at each connector, never route the two buses adjacent | Signal integrity, no cross-talk between isolated and regular bus |
+| CAN isolation | Creepage ≥ 6.4 mm GND ↔ GND_ISO; 6 mm milled slot around ISO1050 #2 and dock pads 3–6; no copper crossing | IEC 60335 reinforced insulation, carried across the dock |
+| CAN stub | ISO1050 #2 bus pins to pads 3–4 < 30 mm; no termination on this board | The dock → board run is a stub ≤ 30 cm off the CSC-terminated bus |
+| Dock pads | 8 pads, 2.54 mm pitch, ≥ 2.0 mm diameter, on L4 at the edge; ≥ 1.5 mm track to pad 1/2; mechanical keying by the enclosure recess | 2 A per contact, repeatable seating |
 | SPI0 to MCP2518FD / J_LCD | Matched within 5 mm, 50 Ω, ground return under the trace | 50 MHz LCD clock |
-| USB D+/D− | 90 Ω differential, matched ± 0.5 mm, < 30 mm | USB 2.0 FS |
 | Pico Zero clearance | 3 mm keep-out around the module outline on L1; passives only under it on L4 | Mechanical fit, Wi-Fi antenna |
-| Battery traces | ≥ 1.5 mm, B+ fused by the pack PCM; divider and NTC traces away from the bucks | 1.2 A discharge, clean ADC reading |
+| Battery traces | ≥ 2 mm, B+ fused by the pack PCM; R_SH2 Kelvin-sensed; NTC trace away from the bucks | Up to 3 A discharge, clean current reading |
 | VSYS node | ≥ 2 mm, D_SYS1/D_SYS2 within 10 mm of the TPS54531 input cap | Hold-up during switch-over |
-| 24V_STIR | ≥ 2 mm, Q_STIR with ≥ 200 mm² pour | 3 A motor peak |
+| 6V_DSP | ≥ 1.5 mm from Q_DSB to J_DSB1-4 / TB6612 / J_SLD; R_SH1 Kelvin-sensed | 2.5 A servo stall, stall-window accuracy |
+| Load-cell inputs | Bridge pairs routed as differential pairs over solid ground, ≥ 5 mm from any switching node | 24-bit ADC, ±1 g |
 | Buck loops | Input cap → IC → inductor → output cap loop < 10 mm | EMI |
-| Thermal vias | ≥ 9 under the STM32 pad, ≥ 6 under each buck IC | Heat to L2 |
-| Mains relay | ≥ 2.5 mm clearance around relay contacts | IEC 60335-1 |
+| Thermal vias | ≥ 6 under each buck IC and the TP5100 | Heat to L2 |
 
 ---
 
@@ -935,15 +814,15 @@ Placement rationale:
 
 | Component | Condition | Power (W) | Notes |
 |-----------|-----------|-----------|-------|
-| MP1584EN #1 (12 V) | 1.4 A continuous | ~1.9 | Lighter than v2 (5 V buck moved off this rail) |
-| MP1584EN #2 (6.5 V) | 2.5 A, duty < 10 % | ~0.4 avg | Rail off when idle |
-| TPS54531 (5 V from 24 V) | 0.7 A continuous | ~0.6 | ~87 % efficient at 24 V in |
-| TP5100 charger | 0.5 A at 8.4 V from 12 V | ~0.7 | Charging only |
+| MP1584EN #1 (12 V) | 0.8 A while charging | ~1.0 | Docked with mains only |
+| MP1584EN #2 (6.0 V) | 2.5 A, duty < 10 % | ~0.4 avg | Rail off when idle |
+| TPS54531 (5 V from 24 V or the pack) | 0.6 A continuous | ~0.5 | ~87 % efficient at 24 V in; better on the pack |
+| TP5100 charger | 1.0 A at 8.4 V from 12 V | ~1.0 | Charging only; pour per §11.3 |
 | TB6612FNG | 1.2 A, intermittent | ~0.7 | |
-| AMS1117-3.3 | 0.2 A | ~0.3 | |
-| ISO1050 x2, SN65HVD230, MCP2518FD | — | ~0.4 | |
-| SS54 x3 (input, D_SYS1), IRLML6344 x4, Q_STIR, Q_DSB | — | ~1.8 | Diode drops dominate |
-| **Total** | | **~6.5 W typical** | At 40 °C ambient every IC stays below 110 °C junction with the pours in §11.3 |
+| AMS1117-3.3 | 0.15 A | ~0.25 | |
+| ISO1050 #2, MCP2518FD, NAU7802 x2, INA219 x2 | — | ~0.3 | |
+| SS54 x2 (D_SYS1/2), IRLML6344 x3, Q_DSB | — | ~1.0 | Diode drops dominate |
+| **Total** | | **~5 W typical** | At 40 °C ambient every IC stays below 110 °C junction with the pours in §11.3; the DU is the cool unit |
 
 The Pico Zero (~1 W) dissipates through its own board; leave 10 mm of free air above it.
 
@@ -953,99 +832,84 @@ The Pico Zero (~1 W) dissipates through its own board; leave 10 mm of free air a
 
 | Ref | Part | Package | Qty | Unit (USD) | Notes |
 |-----|------|---------|-----|-----------|-------|
-| **Microcontroller** | | | | | |
-| U_MCU | STM32G474RET6 | LQFP-64 | 1 | $8.00 | |
-| Y1, Y2 | 8 MHz, 32.768 kHz crystals | SMD | 2 | $0.50 | |
-| **AP slot** | | | | | |
+| **AP slot + RV1106 CAN node** | | | | | |
 | J_AP | 2x20 socket, 2.54 mm, 8.5 mm | TH | 1 | $0.80 | Pico Zero slot |
 | STANDOFF x4 | M2.5 x 8 mm + screws | — | 4 | $0.10 | |
 | U_CAN_AP | MCP2518FD-E/SL | SOIC-14 | 1 | $2.50 | RV1106 CAN node |
 | Y3 | 40 MHz crystal + 2x 15 pF | SMD | 1 | $0.50 | |
+| U_CAN2 | ISO1050DUB | SOIC-8 | 1 | $3.50 | **Bus side from dock 5V_ISO** |
+| PESD1CAN, C_CAN x4 | — | — | 1 lot | $0.30 | |
+| **Dock** | | | | | |
+| J_DOCK | **8 gold pads on L4 (no part)** | PCB | — | — | **Mating pogo block in the system BOM** |
+| D_TVS1, C_IN | SMBJ24A, 10 µF 50 V | SMB, 1206 | 2 | $0.35 | **DOCK_24V hot-plug** |
+| Q_PWR, R_DIV1-2, R_PU x2 | 2N7002, 100k, 10k | SOT-23, 0402 | 1 lot | $0.08 | **DOCK_PWR_OK, DOCK_SENSE_A** |
 | **Power conversion** | | | | | |
-| U_BUCK1-2 | MP1584EN | SOT-23-8 | 2 | $0.80 | 12 V, 6.5 V |
+| U_BUCK1-2 | MP1584EN | SOT-23-8 | 2 | $0.80 | 12 V (charger), **6.0 V from VSYS** |
 | U_BUCK3 | TPS54531DDAR | SOIC-8 | 1 | $1.50 | VSYS → 5 V |
 | U_LDO | AMS1117-3.3 | SOT-223 | 1 | $0.30 | |
 | L1, L2, L3 | 33 µH, 22 µH (CDRH104R), 10 µH (CDRH127) | — | 3 | $0.55 | |
-| D_SYS1, D_SYS2 | **SS54** | SMA | 2 | $0.20 | **VSYS diode-OR (24 V / battery)** |
-| C_SYS | **100 µF, 35 V electrolytic** | 8x10 | 1 | $0.25 | **VSYS hold-up** |
-| D_OR1, D_OR2 | SS14 | SMA | 2 | $0.10 | 5V_MAIN / 5V_USB OR |
-| **Battery backup** | | | | | |
-| U_CHG | **TP5100** | QFN-16 | 1 | $0.40 | **2S switching charger, 0.5 A** |
-| L_CHG | **22 µH, Isat > 2 A, shielded** | 6x6 | 1 | $0.30 | |
-| D_CHG | **SS34** | SMA | 1 | $0.15 | Charger catch diode |
-| R_CS | **0.2 Ω 1 % 0.5 W** | 2010 | 1 | $0.10 | Charge current sense |
-| R_BAT1, R_BAT2 | **100k, 22k 1 %** | 0402 | 2 | $0.01 | Pack voltage divider → PC1 |
+| D_SYS1, D_SYS2 | SS54 | SMA | 2 | $0.20 | VSYS diode-OR (**DOCK_24V** / battery) |
+| C_SYS | 100 µF, 35 V electrolytic | 8x10 | 1 | $0.25 | VSYS hold-up |
+| **Battery (primary supply)** | | | | | |
+| U_CHG | TP5100 | QFN-16 | 1 | $0.40 | 2S switching charger, **1.0 A** |
+| L_CHG | 22 µH, Isat > 2 A, shielded | 6x6 | 1 | $0.30 | |
+| D_CHG | SS34 | SMA | 1 | $0.15 | Charger catch diode |
+| R_CS | **0.1 Ω 1 % 0.5 W** | 2010 | 1 | $0.10 | Charge current sense |
+| U_MON2, R_SH2 | **INA219BIDR, 10 mΩ 2512** | — | 2 | $0.90 | **Pack voltage + current, 0x44** |
 | R_NTC_BIAS, R_CHRG_PU, R_STBY_PU | 10k | 0402 | 3 | $0.01 | |
 | D_CHG_LED, D_STB_LED + 1k | Red / blue 0603 | 0603 | 2 | $0.03 | |
 | C_CHG_IN, C_CHG_OUT | 10 µF 25 V, 22 µF 16 V | 0805 | 2 | $0.12 | |
-| J_BAT | **JST-XH 2.5 mm 3-pin** | TH | 1 | $0.10 | B+, B−, NTC |
-| (pack) | **2S1P 18650 pack with PCM, 2,600 mAh, NTC** | — | 1 | $12.00 | **Not on the PCB; system BOM** |
-| **Isolated CAN (heater)** | | | | | |
-| U_CAN1, U_CAN2 | ISO1050DUB | SOIC-8 | 2 | $3.50 | STM32 and RV1106 nodes |
-| U_ISO_DC | B0505S-1WR3 | SIP-4 | 1 | $2.50 | 5V_ISO |
-| R_TERM1, F_CAN, C_CAN x5, PESD1CAN | — | — | 1 lot | $0.40 | |
-| J_CAN_HEAT | JST-XH 4-pin | TH | 1 | $0.15 | |
-| **Regular CAN (stirring motor)** | | | | | |
-| U_CAN3 | **SN65HVD230DR** | SOIC-8 | 1 | $0.90 | **FDCAN2 transceiver** |
-| R_TERM2, R_RS, PESD1CAN, C | 120R, 10k, ESD, 100 nF | — | 1 lot | $0.20 | |
-| J_CAN_STIR | **JST-XH 3-pin** | TH | 1 | $0.12 | |
-| Q_STIR, Q_STIR_N | **AO4407A + 2N7002** | SO-8, SOT-23 | 2 | $0.45 | **24 V_STIR high-side switch** |
-| F_STIR | 5 A polyfuse | 1812 | 1 | $0.40 | |
-| C_STIR | 100 µF 35 V + 10 µF | — | 2 | $0.35 | |
-| J_STIR_PWR | **XT30 2-pin** | TH | 1 | $0.40 | |
+| J_BAT | JST-XH 2.5 mm 3-pin | TH | 1 | $0.10 | B+, B−, NTC |
+| (pack) | 2S1P 18650 pack with PCM, 2,600 mAh, NTC | — | 1 | $12.00 | Not on the PCB; system BOM |
 | **Dispenser Servo Block** | | | | | |
-| U_PWM | PCA9685PW | TSSOP-28 | 1 | $1.50 | I2C 0x41 |
-| Q_DSB, Q_DSB_N | AO3401 + 2N7002 | SOT-23 | 2 | $0.15 | 6.5 V rail switch |
-| F_DSB, C_DSB | 3 A PTC, 1000 µF 10 V | — | 2 | $0.50 | |
-| D_DSB4 | **M7 (1N4007 SMD)** | SMA | 1 | $0.03 | **Series drop on J_DSB4 V+ for the 6 V MG90S** |
-| J_DSB1-4 | 3-pin servo header | TH | 4 | $0.10 | |
+| U_PWM | PCA9685PW | TSSOP-28 | 1 | $1.50 | I2C3 0x41 |
+| Q_DSB, Q_DSB_N | AO3401 + 2N7002 | SOT-23 | 2 | $0.15 | 6.0 V rail switch |
+| F_DSB, C_DSB, D_TVS2 | 3 A PTC, 1000 µF 10 V, SMBJ6.0A | — | 3 | $0.60 | |
+| U_MON1, R_SH1 | INA219BIDR, 10 mΩ 2512 | — | 2 | $0.90 | **Moved to the 6V_DSP rail, 0x40** |
+| J_DSB1-4 | 3-pin servo header | TH | 4 | $0.10 | **D_DSB4 removed** |
 | **SLD** | | | | | |
-| U_TB | TB6612FNG | SSOP-24 | 1 | $1.50 | |
-| Q_SOL1-2, D_FB1-2 | IRLML6344, SS14 | SOT-23, SMA | 4 | $0.15 | |
-| J_SLD | Hirose DF11-16DP-2DS | TH | 1 | $0.80 | |
-| **Fans, LED, buzzer** | | | | | |
-| Q_FAN1-2, D_FB3-4 | IRLML6344, SS14 | — | 4 | $0.15 | |
-| U_LS | 74AHCT1G125 | SOT-23-5 | 1 | $0.30 | WS2812B level shift |
-| Q_LED_N, Q_LED_P | 2N7002, SI2301 | SOT-23 | 2 | $0.08 | |
-| Q_BUZZ | 2N7002 | SOT-23 | 1 | $0.05 | |
-| J_FAN, J_LED, J_BUZZER | JST-XH 4, JST-XH 3, JST-PH 2 | TH | 3 | $0.12 | |
-| **I2C expander + monitor** | | | | | |
-| U_EXP2 | PCF8574 | SOIC-16 | 1 | $0.50 | 0x21 |
-| U_MON, R_SHUNT | INA219BIDR, 10 mΩ 2512 | — | 2 | $0.90 | |
+| U_TB | TB6612FNG | SSOP-24 | 1 | $1.50 | VM = 6V_DSP |
+| Q_SOL1-2, D_FB1-2 | IRLML6344, SS14 | SOT-23, SMA | 4 | $0.15 | 6 V solenoids |
+| U_MUX | **TCA9543A** | TSSOP-14 | 1 | $1.00 | **I2C mux 0x71** |
+| U_ADC1-2 | **NAU7802SGI** | SOIC-16 | 2 | $2.00 | **24-bit load-cell ADCs, 0x2A** |
+| C_NAU x6, R_NAU x4 | 10 µF, 100 nF, 1k | 0603/0402 | 1 lot | $0.15 | |
+| D_ESD1-2 | PRTR5V0U2X | SOT-143B | 2 | $0.15 | Bridge sense lines |
+| J_SLD | Hirose DF11-16DP-2DS | TH | 1 | $0.80 | Re-pinned |
+| **LED, buzzer** | | | | | |
+| Q_LED | **IRLML6344** | SOT-23 | 1 | $0.06 | **White ring low-side, RV1106 PWM** |
+| Q_BUZZ | 2N7002 | SOT-23 | 1 | $0.05 | RV1106 PWM |
+| J_LED, J_BUZZER | **JST-XH 2**, JST-PH 2 | TH | 2 | $0.08 | |
+| **I2C expander** | | | | | |
+| U_EXP2 | PCF8574 | SOIC-16 | 1 | $0.50 | 0x21, now on I2C3 |
 | **Protection** | | | | | |
-| F1, D_REV, D_TVS1-3, F2-F3 | 5 A polyfuse, SS54, SMBJ24A/12A/6.5A, 3 A polyfuses | — | 1 lot | $1.60 | |
-| Q_RLY, D_FLY | 2N7002, 1N4148WS | — | 2 | $0.08 | |
-| D_ESD1-2 | PRTR5V0U2X | SOT-143B | 2 | $0.15 | |
-| **USB-C** | | | | | |
-| J_USB, U_ESD, R_DP/DM, R_CC1-2, R_VBUS1-2, F_USB, SW_BOOT | — | — | 1 lot | $0.80 | |
+| F_12V, D_TVS3 | 1.5 A polyfuse, SMBJ12A | — | 2 | $0.45 | 12 V rail |
 | **Display break-out** | | | | | |
 | J_LCD | 1x14 header 2.54 mm | TH | 1 | $0.15 | |
-| R_I2C3 x2, R_SER x10 | 4.7k, 33R | 0402 | 12 | $0.01 | |
-| **Passives** | decoupling, pull-ups/downs, gate resistors, feedback dividers, crystal caps | — | ~120 | — | ~$2.50 |
-| **Mechanical** | SW_RST, SJ1, J_SWD, J_SAFE, J_24V_IN | — | 5 | — | $1.40 |
-| **PCB** | 4-layer 160 x 90 mm, ENIG, 2 oz outer | — | 1 | $5.50 | JLCPCB, 5 pcs |
+| R_I2C3 x2, R_SER x12 | 4.7k, 33R | 0402 | 14 | $0.01 | |
+| **Passives** | decoupling, pull-ups/downs, gate resistors, feedback dividers, crystal caps | — | ~90 | — | ~$2.00 |
+| **PCB** | 4-layer 160 x 90 mm, ENIG, 2 oz outer, dock pads | — | 1 | $5.50 | JLCPCB, 5 pcs |
+
+Removed from this board in v4.0 (to the CSC or deleted): STM32G0B1RET6 + crystals, ISO1050DUB #1, B0505S-1WR3, SN65HVD230, Q_STIR/F_STIR/C_STIR, Q_RLY + flyback, fan MOSFETs, 74AHCT1G125, Q_LED_P/Q_LED_N, 2x HX711 breakouts, D_DSB4, R_BAT1/R_BAT2, USB-C lot, J_24V_IN, J_CAN_HEAT, J_CAN_STIR, J_STIR_PWR, J_FAN, J_SAFE, J_SWD, J_USB, SW_BOOT/SW_RST.
 
 ### 13.1 Cost Summary
 
 | Category | Prototype (1x) | Volume (100x) |
 |----------|----------------|---------------|
-| MCU + crystals | $8.50 | $6.00 |
-| AP slot + RV1106 CAN node (socket, standoffs, MCP2518FD, crystal) | $4.20 | $3.00 |
-| Power conversion (3 bucks, LDO, VSYS OR, passives) | $9.80 | $6.20 |
-| Battery charger + monitoring (on-board) | $1.50 | $1.00 |
-| Isolated CAN (2x ISO1050, B0505S, passives) | $10.00 | $7.00 |
-| Regular CAN + motor power switch | $2.80 | $1.80 |
-| Dispenser Servo Block | $2.55 | $1.80 |
-| SLD drivers | $2.60 | $1.90 |
-| Fans / LED / buzzer / relay / ESD | $1.80 | $1.10 |
-| I2C expander + INA219 | $1.40 | $1.00 |
-| USB-C, display break-out, passives, mechanical | $6.00 | $3.50 |
-| Connectors (19) | $5.40 | $3.30 |
+| AP slot + RV1106 CAN node (socket, standoffs, MCP2518FD, crystal, ISO1050 #2) | $7.70 | $5.50 |
+| Dock (TVS, sense) | $0.45 | $0.30 |
+| Power conversion (3 bucks, LDO, VSYS OR, passives) | $7.20 | $4.60 |
+| Battery charger + INA219 #2 | $2.30 | $1.60 |
+| Dispenser Servo Block + INA219 #1 | $3.70 | $2.60 |
+| SLD drivers (TB6612, solenoids, TCA9543A, 2x NAU7802) | $5.90 | $4.00 |
+| LED / buzzer / expander / protection | $1.20 | $0.80 |
+| Display break-out, passives | $2.30 | $1.40 |
+| Connectors (11) | $2.60 | $1.70 |
 | PCB | $5.50 | $2.50 |
-| **Board total** | **~$62** | **~$40** |
+| **Board total** | **~$39** | **~$25** |
 | Battery pack (system BOM, off-board) | $12.00 | $8.00 |
+| 8-pin magnetic pogo pair (system BOM, with the CS pillar) | $6.00 | $4.00 |
 
-Compared with v2.0 (~$58): +$2.50 for the second ISO1050 and MCP2518FD, +$1.80 for the regular CAN port and motor switch, −$1.90 for the removed 12 V UPS input and single-cell micro-UPS, −$0.60 for the removed IR connector, and the P-ASD/CID driver parts (−$5) replaced by the DSB (+$2.55). The off-the-shelf 12 V UPS ($15–30) and the MLX90614 ($12) leave the system BOM; the 2S pack ($12) joins it.
+Compared with v3.1 (~$62): the MCU, the second ISO1050, B0505S, SN65HVD230, motor switch, relay, fans, USB and eight connectors (≈ −$27) leave for the CSC or disappear; the NAU7802 pair, TCA9543A and INA219 #2 (≈ +$4) join. The CSC (≈ $25 PCB + parts) and the pogo pair are added to the system BOM; the net system delta is ≈ +$32 (see the project BOM).
 
 ---
 
@@ -1057,60 +921,56 @@ Compared with v2.0 (~$58): +$2.50 for the second ISO1050 and MCP2518FD, +$1.80 f
 | Copper | 2 oz outer, 1 oz inner |
 | Min trace / space | 0.15 mm signal; power per §11.3 |
 | Min via | 0.3 mm drill, 0.6 mm pad |
-| Finish | ENIG |
+| Finish | ENIG; hard gold on the J_DOCK pads if offered |
 | Material | FR-4, Tg ≥ 150 °C |
 | Dimensions | 160 x 90 mm |
 | Mounting | 4x M3 corner holes; 4x M2.5 holes for the Pico Zero standoffs (match the module's 3.0 mm hole pattern, 65 x 30 mm outline) |
-| Milling | 6 mm CAN isolation slot |
-| Impedance | 50 Ω SPI0; 90 Ω differential USB |
+| Milling | 6 mm CAN isolation slot around ISO1050 #2 and dock pads 3–6 |
+| Impedance | 50 Ω SPI0 |
 
 ### 14.1 Assembly Notes
 
-- SMT both sides (passives under the Pico Zero on L4), reflow; then hand/wave solder TH: J_AP, J_LCD, J_SLD, J_SAFE, JST-XH/PH, XT30 x2, J_DSB x4, B0505S, electrolytics
+- SMT both sides (passives under the Pico Zero on L4), reflow; then hand solder TH: J_AP, J_LCD, J_SLD, JST-XH/PH, J_DSB x4, electrolytics
 - Fit the Pico Zero standoffs before populating J_AP so the socket height is set by the standoffs
-- Pin 1 silkscreen triangles on all connectors; label J_CAN_HEAT "ISOLATED — heater only" and J_CAN_STIR "MOTOR" to prevent swapping
+- Keep solder mask and silkscreen off the eight J_DOCK pads; label the pad row "DOCK — pads 3-6 ISOLATED"
+- Pin 1 silkscreen triangles on all connectors
 
 ---
 
-## 15. Firmware Integration Notes
+## 15. Firmware Integration Notes (RV1106 / `epicurad`)
 
-### 15.1 FreeRTOS Task Allocation
+### 15.1 Thread Allocation Touching This Board
 
-| Task | Rate | Priority | Functions |
-|------|------|----------|-----------|
-| Motor Control | 50 Hz | Highest | FDCAN2: velocity/position commands to the stir motor, feedback parsing (rpm, current, temperature), stir patterns, ramps, stall detection from motor current |
-| Safety Monitor | 10 Hz | Highest | HEAT_STATUS limits (surface/coil over-temperature), E-stop, heartbeat, Q_STIR/Q_DSB/relay authority, IWDG kick |
-| Dispense | 50 Hz (while active) | High | PCA9685 moves (one servo at a time), DSB rail, TB6612 pumps, solenoids, HX711 closed loop |
-| CAN Comms (FDCAN1) | 20 Hz | High | Host commands, ACK/NAK, TELEMETRY/STATUS/LOADCELLS, SET_LED, HEAT_STATUS capture |
-| Sensor Poll | 10 Hz | Medium | HX711, INA219, battery ADC (PC1), charger status (PCF8574 #2 P6/P7), 24 V comparator state |
+| Thread | Rate | Functions |
+|--------|------|-----------|
+| `dispense` (new, SCHED_OTHER) | 50 Hz while active | PCA9685 ramped moves (≤ 3°/tick) with OE and 6V_DSP enable, one servo at a time; stall = INA219 #1 window + 3 s timeout + I2C NACK → retry once → DSB_STALL; SLD closed loop on the NAU7802 at 10 Hz, stop at 95 % of target, solenoid + pump sequencing; tare, preflight, home, status. Internal queue from the recipe engine with the former CAN command names (DISPENSE_FID/CID/SLD, QUERY_WEIGHT, PREFLIGHT, TARE, DISPENSER_HOME, DISPENSER_STATUS) |
+| sensor path: power/dock monitor | 1 Hz + GPIO edges | INA219 #2 (batt_mV, batt_mA, state of charge), PCF8574 #2 P6/P7 (charging / complete), DOCK_SENSE_A (docked), DOCK_PWR_OK (dock_power); battery indicator always visible in the UI |
+| `can` | event | MCP2518FD SocketCAN `can0`; bus-off while lifted is expected |
+| UI / LED / buzzer | event | PWM_LED duty OFF / CAPTURE / NIGHT; buzzer tones on PWM_BUZZER |
+| swupdate handler | on demand | STM32 image streamed over CAN (0x7E0 FW_UPDATE_REQ / 0x7E8 FW_UPDATE_RSP) to the CSC's in-application bootloader; replaces UART2 + BOOT0/NRST |
 
-### 15.2 STM32 Peripheral Allocation
+### 15.2 RV1106 Peripheral Allocation
 
-| Peripheral | Pins | Function |
-|------------|------|----------|
-| FDCAN1 | PB8/PB9 | Isolated heater bus, 500 kbps, 11-bit IDs |
-| FDCAN2 | PB12/PB13 | Stir motor bus, 1 Mbps, 29-bit IDs |
-| USART2 | PA2/PA3 | Service link (bootloader/debug) |
-| I2C1 | PA15/PB7 | PCA9685 0x41, PCF8574 #2 0x21, INA219 0x40 |
-| TIM15_CH1 + DMA | PB14 | WS2812B |
-| TIM3_CH1, TIM2_CH3 | PA6, PB10 | Fans, 25 kHz |
-| TIM8_CH2 | PC7 | Buzzer |
-| ADC1 | PC0, PC1 | VBUS detect, battery voltage |
-| COMP1 | PA1 | 24 V power-fail |
-| USB FS | PA11/PA12 | DFU / CDC |
+| Peripheral | Header | Function |
+|------------|--------|----------|
+| SPI0 CS0 / CS1 | 19/21/23/24 + GPIO 58 | ST7796S LCD; MCP2518FD (500 kbps `can0`) |
+| I2C3 | 16/18 | PCF8574 #2 0x21, PCA9685 0x41, INA219 0x40 / 0x44, TCA9543A 0x71 → NAU7802 0x2A x2, FT6336 0x38 |
+| GPIO x3 | fixed at layout | PCA9685 OE (out), DOCK_SENSE_A (in, edge), DOCK_PWR_OK (in, edge) |
+| PWM x4 | fixed at layout | TB6612 PWMA / PWMB, Q_LED, buzzer |
+| PWM10 | 12 | LCD backlight |
+| GPIO | 22, 26, 36, spare | LCD DC / RST, touch INT / RST, MCP2518FD nINT |
 
-### 15.3 Power Failure Sequence
+### 15.3 Power-Fail and Lift Sequences
 
-1. COMP1 trips (24 V < 16.5 V) → `on_battery = true`; actuators are already unpowered; firmware sets PCF8574 #2 P3/P4/P5 low and PCA9685 OE high, relay off
-2. STATUS (0x312) with POWER_FAIL and `batt_mV` to the RV1106 within 50 ms; RV1106 checkpoints the session, dims the LCD, shows "Power lost — running on battery"
-3. Battery voltage polled at 1 Hz; warning to the RV1106 at 6.4 V, shutdown request at 6.2 V (RV1106 syncs and halts; STM32 enters STOP mode)
-4. On 24 V recovery (> 20 V for 2 s) → POWER_FAIL cleared; RV1106 decides whether to resume (see state machine §5)
+1. **CS mains lost while docked:** DOCK_PWR_OK goes inactive with DOCK_SENSE_A still low; confirmed by a 300 ms TELEMETRY timeout → PAUSED (AC Power Failure). VSYS is already on the pack (passive OR, no reboot). The heater and stir motor are down on the CS side. Auto-resume to RESUMING when TELEMETRY returns within 5 min (the CSC reboots in < 1 s), prompt if < 30 min, ERROR beyond.
+2. **Unit lifted:** DOCK_SENSE_A goes high → PAUSED (UNIT_LIFTED); LED ring OFF, dispensing refused; `can0` goes bus-off. Resume only by user tap after re-docking (DOCK_SENSE_A low, TELEMETRY back); same 30 min food-safety ceiling.
+3. **Battery low:** warning banner at 6.4 V; at 6.2 V checkpoint + halt (RECOVERING on the next boot). The pack PCM at 5.6 V is the last resort.
 
 ### 15.4 Battery Charger Behaviour
 
-- Charging runs autonomously whenever the 12 V rail is up; the STM32 only reads CHRG/STDBY and the pack voltage
-- Fault indication: CHRG and STDBY both inactive with the pack below 8.0 V for > 10 min → BATTERY_FAULT in STATUS (pack missing, NTC out of range, or charger fault)
-- Self-test at boot: pack voltage between 5.5 V and 8.5 V, else BATTERY_FAULT (cooking is still allowed; the warning is informational)
+- Charging runs autonomously whenever the 12 V rail is up (docked, CS mains present); `epicurad` only reads CHRG/STDBY and INA219 #2
+- Fault indication: CHRG and STDBY both inactive with the pack below 8.0 V for > 10 min while DOCK_PWR_OK is active → battery fault banner (pack missing, NTC out of range, or charger fault); cooking is still allowed
+- Self-test at boot: INA219 #2 bus voltage between 5.5 V and 8.5 V, else the same banner
 
 ---
 
@@ -1118,67 +978,66 @@ Compared with v2.0 (~$58): +$2.50 for the second ISO1050 and MCP2518FD, +$1.80 f
 
 ### 16.1 Pre-Fabrication
 
-- [ ] ERC passes; STM32 alternate functions verified: PB8/PB9 FDCAN1 (AF9), PB12/PB13 FDCAN2 (AF9), PA15/PB7 I2C1 (AF4), PB14 TIM15_CH1, PA2/PA3 USART2
-- [ ] J_AP pinout matches the Luckfox Pico Zero 40-pin header; SPI0_CS1 and the two spare GPIO (MCP2518FD INT, TP_RST) confirmed against the Luckfox pinout; GPIO 32/38 to BOOT0/NRST
+- [ ] ERC passes; no STM32 symbol or net left on the board
+- [ ] J_AP pinout matches the Luckfox Pico Zero 40-pin header; SPI0_CS1, the five spare GPIO (MCP2518FD INT, TP_RST, PCA9685 OE, DOCK_SENSE_A, DOCK_PWR_OK) and the four PWM confirmed against the Luckfox pinout; pins 8/10/32/38 unconnected or reused
 - [ ] Pico Zero outline, 3.0 mm hole pattern and standoff height checked against the module drawing
 - [ ] J_LCD pin order matches the chosen 4" ST7796S/FT6336 module
-- [ ] Two separate CAN buses: no shared termination, FDCAN1 only on ISO1050 #1, FDCAN2 only on SN65HVD230
-- [ ] Isolation: only the two ISO1050 bus pins and the B0505S output cross the slot
-- [ ] TP5100 strapped for 2S (8.4 V), R_CS = 0.2 Ω, NTC bias per datasheet, CHRG/STDBY pulled up to 3.3 V
-- [ ] VSYS diode-OR: D_SYS1 from 24 V internal, D_SYS2 from B+; TPS54531 feedback 4.98 V; C_SYS rated 35 V
-- [ ] Battery divider 100k/22k on PC1 reads ≤ 1.6 V at 8.4 V
-- [ ] Q_STIR and Q_DSB default OFF (gate pull-ups), driven by PCF8574 #2 P5 / P4 through 2N7002
-- [ ] PCA9685 OE 10k pull-up (off at boot), A0 = 1 → 0x41; PCF8574 #2 A0 = 1 → 0x21; INA219 0x40
-- [ ] All MOSFET gates: 100R series + 10k pull-down (or pull-up for P-MOSFETs)
-- [ ] 24 V protection order: polyfuse → Schottky → TVS
-- [ ] USB: 22R, USBLC6, 5.1k CC, VBUS divider on PC0, SW_BOOT on BOOT0 with 10k pull-down
-- [ ] All 19 connectors have correct pinouts and silkscreen
+- [ ] Isolation: only the ISO1050 #2 bus pins cross the slot; dock pads 3–6 inside the island, pads 1–2 / 7–8 outside; no termination resistor on this board
+- [ ] J_DOCK pad pattern matches the pogo block (2.54 mm pitch, pad 1 position vs the keyed recess) and the DU underside drawing
+- [ ] TP5100 strapped for 2S (8.4 V), R_CS = 0.1 Ω, NTC bias per datasheet, CHRG/STDBY pulled up to 3.3 V
+- [ ] VSYS diode-OR: D_SYS1 from DOCK_24V, D_SYS2 from B+ via R_SH2; TPS54531 feedback 4.98 V; MP1584EN #2 feedback 5.99 V from VSYS; C_SYS rated 35 V
+- [ ] INA219 #1 A0/A1 → 0x40 on 6V_DSP; INA219 #2 → 0x44 on BAT+; both shunts Kelvin-connected
+- [ ] TCA9543A address vs PCA9685 All-Call (§3.1 note) resolved; NAU7802 AVDD decoupling per datasheet
+- [ ] Q_DSB default OFF (gate pull-up), driven by PCF8574 #2 P4 through 2N7002; PCA9685 OE 10k pull-up, A0 = 1 → 0x41; PCF8574 #2 A0 = 1 → 0x21
+- [ ] All MOSFET gates: 100R series + 10k pull-down (or pull-up for P-MOSFETs); all four PWM lines pulled down
+- [ ] DOCK_24V: SMBJ24A + 10 µF at the pad; DOCK_PWR_OK divider 100k/10k; DOCK_SENSE_A 10k pull-up; DOCK_SENSE_B to GND
+- [ ] All 11 connectors have correct pinouts and silkscreen; J_SLD pins 9–16 per §10.9
 
 ### 16.2 PCB Layout
 
-- [ ] DRC passes; GND plane continuous except the CAN slot
-- [ ] Creepage ≥ 6.4 mm across the isolation slot, ≥ 2.5 mm around the relay
+- [ ] DRC passes; GND plane continuous except the CAN slot around ISO1050 #2 and dock pads 3–6
+- [ ] Creepage ≥ 6.4 mm across the isolation slot and across the dock pad row (pads 2 ↔ 3, 6 ↔ 7)
 - [ ] Pico Zero keep-out respected; standoff holes placed; antenna end at the board edge away from the bucks
-- [ ] SPI0 traces to MCP2518FD and J_LCD matched within 5 mm; USB pair 90 Ω
-- [ ] Battery, VSYS and 24V_STIR trace widths per §11.3
-- [ ] Buck loops < 10 mm; thermal vias and pours present
-- [ ] J_CAN_HEAT the only connector on the isolated island; J_CAN_STIR ≥ 20 mm from it
+- [ ] SPI0 traces to MCP2518FD and J_LCD matched within 5 mm
+- [ ] Battery, VSYS and 6V_DSP trace widths per §11.3; shunt Kelvin traces
+- [ ] Load-cell bridge pairs routed differentially over solid ground
+- [ ] Buck loops < 10 mm; thermal vias and pours present (incl. TP5100)
+- [ ] J_DOCK pads on L4 at the pillar edge, mask-free, matching the mechanical drawing
 
 ### 16.3 Post-Assembly
 
-- [ ] 3.3 V, 5 V, 12 V, 6.5 V rails within ±3 %
-- [ ] STM32 responds on SWD; DFU over USB-C with 24 V and battery disconnected
-- [ ] Pico Zero boots in J_AP; LCD renders through J_LCD; touch events on I2C3
-- [ ] `can0` on the RV1106 (MCP2518FD) and FDCAN1 on the STM32 exchange frames at 500 kbps; HEAT_QUERY to the module returns HEAT_STATUS
-- [ ] FDCAN2 at 1 Mbps: motor enumerates, velocity command spins the arm, feedback frames arrive at 50 Hz
-- [ ] Q_STIR off at reset: 0 V on J_STIR_PWR until PCF8574 #2 P5 is set
-- [ ] I2C scan finds 0x21, 0x40, 0x41 (three devices)
-- [ ] DSB: each servo reaches the commanded angle; rail switches off after a move; OE high leaves servos limp
-- [ ] SLD: pumps run both directions; solenoids click; both HX711 channels stable ±1 g
-- [ ] Battery: pack charges to 8.4 V at ~0.5 A from the 12 V rail; CHRG then STDBY read correctly on P6/P7; PC1 reads pack voltage within 2 %
-- [ ] Pull the 24 V input during a cook simulation: 5V_MAIN stays within ±5 % with no reboot of the Pico Zero; COMP1 trips; STATUS carries POWER_FAIL and `batt_mV`; LED ring turns off
-- [ ] Battery run-time ≥ 4 h at the logic-domain load; shutdown request at 6.2 V
-- [ ] NTC disconnected → charger stops (CHRG/STDBY both inactive) → BATTERY_FAULT reported
-- [ ] E-stop: relay opens, HEAT_ON_OFF=0 and E_STOP on FDCAN1, motor disable on FDCAN2 and Q_STIR off, all within 100 ms
-- [ ] All actuators and both power switches off with the STM32 held in reset
+- [ ] 3.3 V, 5 V rails within ±3 % on the pack alone (no dock); 12 V and 6.0 V within ±3 % with DOCK_24V applied
+- [ ] Pico Zero boots in J_AP from the pack; LCD renders through J_LCD; touch events on I2C3
+- [ ] I2C3 scan finds 0x21, 0x38, 0x40, 0x41, 0x44, 0x71; 0x2A appears behind each TCA9543A channel
+- [ ] `can0` (MCP2518FD) exchanges frames with the CSC's FDCAN1 at 500 kbps through a bench pogo block; HEAT_QUERY to the heating unit returns HEAT_STATUS
+- [ ] DSB: each servo reaches the commanded angle on 6.0 V; rail switches off after a move; OE high leaves servos limp; INA219 #1 shows the move current
+- [ ] SLD: pumps run both directions on 6 V; solenoids click; both NAU7802 channels stable ±1 g
+- [ ] White ring: PWM 0 / 30 / 100 % give OFF / NIGHT / CAPTURE; ≤ 1 A at 100 %
+- [ ] Battery: pack charges to 8.4 V at ~1.0 A from the 12 V rail; CHRG then STDBY read correctly on P6/P7; INA219 #2 voltage within 2 % and current sign correct (charge vs discharge)
+- [ ] Pull DOCK_24V during a cook simulation: 5V_MAIN stays within ±5 % with no reboot of the Pico Zero; DOCK_PWR_OK goes inactive; UI shows "Power lost — running on battery"
+- [ ] Lift the DU from the bench block: DOCK_SENSE_A goes high, `can0` bus-off, UI shows UNIT_LIFTED; re-dock → bus recovers, resume on tap
+- [ ] Battery run-time ≥ 5 h at the lifted-unit load; halt at 6.2 V, recovery on the next boot
+- [ ] NTC disconnected → charger stops (CHRG/STDBY both inactive) → battery fault banner
+- [ ] All actuators, the 6V_DSP rail, the ring and the buzzer off with the Pico Zero held in reset or removed
 
 ---
 
 ## 17. Related Documentation
 
-- [[../02-Hardware/01-Epicura-Architecture|Epicura Architecture]] — system wiring, CAN buses, power
-- [[../02-Hardware/02-Technical-Specifications|Technical Specifications]] — power specs incl. battery backup
-- [[../05-Subsystems/01-Induction-Heating|Induction Heating]] — module with internal temperature control, isolated CAN port
-- [[../05-Subsystems/02-Robotic-Arm|Robotic Arm]] — CAN servo stirring motor
+- [[02-Cooking-Surface-Controller|Cooking Surface Controller]] — the CS board: STM32G0B1RE, both CAN transceivers, relay, E-stop, fans, dock power switch
+- [[../02-Hardware/01-Epicura-Architecture|Epicura Architecture]] — three units, system wiring, CAN bus, dock, power
+- [[../02-Hardware/02-Technical-Specifications|Technical Specifications]] — power specs incl. the DU battery
+- [[../05-Subsystems/01-Electric-Heating|Electric Heating]] — module with internal temperature control, isolated CAN port
+- [[../05-Subsystems/02-Robotic-Arm|Robotic Arm]] — CAN servo stirring motor (SU)
 - [[../05-Subsystems/03-Ingredient-Dispensing|Ingredient Dispensing]] — DSB and SLD
-- [[../03-Software/05-MCU-Functional-Specification|MCU Functional Specification]] — STM32 firmware requirements
-- [[../03-Software/02-Controller-Software-Architecture|Controller Software Architecture]] — CAN ID map (§7.2)
+- [[../03-Software/05-MCU-Functional-Specification|MCU Functional Specification]] — STM32 firmware requirements (CSC)
+- [[../03-Software/02-Controller-Software-Architecture|Controller Software Architecture]] — CAN ID map (§7.2), `epicurad` threads
 - [[03-PCB-Design-Rules|PCB Design Rules]] — DRC rules and net classes
 - Archived: [[_archive/01-Controller-PCB-Design|Controller PCB]] and [[_archive/02-Driver-PCB-Design|Driver PCB]] (2-board era)
 
 ---
 
-#epicura #pcb #unified #stm32 #rv1106 #can #battery #power-electronics #hardware-design
+#epicura #pcb #unified #dispensing-unit #rv1106 #can #battery #dock #power-electronics #hardware-design
 
 ---
 
@@ -1186,6 +1045,8 @@ Compared with v2.0 (~$58): +$2.50 for the second ISO1050 and MCP2518FD, +$1.80 f
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 4.1 | 2026-11-04 | Manas Pradhan | Heater node on the isolated bus is now the commercial electric heating unit (rice-cooker class, own PID, CAN port) instead of the induction surface: §1 overview, scope table, CAN node table, dock lift-off and battery placement notes, bring-up checklist reworded; HEAT_STATUS `coil_temp` → `element_temp`. Same CAN contract, no schematic or BOM change |
+| 4.0 | 2026-11-04 | Manas Pradhan | Three-unit architecture: this board becomes the Dispensing Unit board; the STM32G0B1RE and everything only it used (crystals, J_SWD, J_USB, USART2 service link, BOOT0/NRST from the Pico Zero), ISO1050DUB #1, B0505S, SN65HVD230, J_CAN_HEAT, J_CAN_STIR, J_STIR_PWR, Q_STIR, J_FAN + fan MOSFETs, Q_RLY, J_SAFE, the 24 V comparator divider, 2x HX711, 74AHCT1G125, WS2812B ring, the battery ADC divider and D_DSB4 leave the board (most to the new Cooking Surface Controller, [[02-Cooking-Surface-Controller\|02-Cooking-Surface-Controller]]). Added: J_DOCK (8 pogo pads: DOCK_24V, GND, isolated CAN_H/CAN_L, GND_ISO, 5V_ISO, DOCK_SENSE_A/B), INA219 #2 (0x44) in the BAT+ path, TCA9543A (0x71) + 2x NAU7802 (0x2A) load-cell ADCs, white LED ring on Q_LED (RV1106 PWM, 2-pin J_LED), DOCK_PWR_OK and DOCK_SENSE_A sense to RV1106 GPIO. The battery is the primary supply: VSYS = DOCK_24V ⊕ BAT+ (same diode-OR), TP5100 charge current 1.0 A (R_CS 0.1 Ω) from a 12 V rail that now feeds the charger only; 6.0 V switched dispenser rail (6V_DSP) from VSYS for all four servos, 6 V pumps and 6 V solenoids; INA219 #1 (0x40) moved to 6V_DSP; 5V_ISO from the dock, no isolated DC-DC. RV1106 I2C3 is the single peripheral bus (FT6336, PCF8574 #2, PCA9685, INA219 x2, TCA9543A/NAU7802); 3 new GPIO (PCA9685 OE, DOCK_SENSE_A, DOCK_PWR_OK) and 4 PWM (pumps, ring, buzzer); header pins 8/10/32/38 freed; STM32 OTA over CAN 0x7E0/0x7E8. §3 rewritten as the RV1106 interface with the PCF8574 #2 map (P3/P5 = TB6612 AIN1/BIN1); J_SLD re-pinned for bridge excitation/sense; 11 connectors; zones with the dock edge and a local isolation slot; BOM, thermal, firmware notes and checklists rewritten |
 | 3.1 | 2026-11-04 | Manas Pradhan | DSB servos sized per axis (DS3218 270° on C1, MG996R on F1/F2, MG90S on F3; spec dispensing v7.3 / architecture v8.2): D_DSB4 (M7) added in series on the J_DSB4 V+ pin to drop the 6.5 V rail to ≈ 5.8 V for the 6 V-rated MG90S; §4.3 load, §6.1, §10.8 and BOM updated; no other board change |
 | 3.0 | 2026-11-04 | Manas Pradhan | Single-board redesign around the Luckfox Pico Zero: J_AP slot (2x20 socket + standoffs) with SPI0/I2C3 break-out to J_LCD, UART2 service link, BOOT0/NRST control and the RV1106 CAN node (MCP2518FD + ISO1050DUB #2); CID + FID drivers are the Dispenser Servo Block (PCA9685, switched 6.5 V rail, J_DSB1-4) and SLD keeps TB6612/solenoids/HX711 on J_SLD; two CAN ports — isolated J_CAN_HEAT (FDCAN1, 2x ISO1050DUB, B0505S) for the cooking surface and regular J_CAN_STIR (FDCAN2 on PB12/PB13, SN65HVD230, 1 Mbps) plus switched 24 V (Q_STIR, J_STIR_PWR) for a CAN servo stirring motor, replacing PWM/EN/DIR on PA8/PA4/PA5; MLX90614 IR thermometer and J_IR_LED removed (the surface runs its own temperature loop; J_LED carries the ring only); 12 V UPS input and single-cell TP4056/MT3608 micro-UPS replaced by a 2S Li-ion pack (J_BAT 3-pin with NTC) charged by a TP5100 from the 12 V rail, with a VSYS diode-OR (24 V / battery) feeding the TPS54531 so the entire 5 V logic domain rides through outages; battery voltage on PC1, charger status on PCF8574 #2 P6/P7, motor power enable on P5; P-ASD, CID stepper/linear actuator, PCF8574 #1, ADS1015, DRV8876 and their connectors removed; 19 connectors; BOM, thermal, zones and checklists rewritten |
 | 2.0 | 2026-03-18 | Manas Pradhan | Added Mornsun B0505S-1WR3 isolated DC-DC for the ISO1050 bus side; J_CAN pin 4 = 5V_ISO |

@@ -48,7 +48,7 @@ Based on IPC-2221B external layer, 10°C temperature rise, 1 oz copper.
 | Light load | 0.30 | ~ 0.7 A | LED drivers, low-power rails |
 | 1 A | 0.50 | 1.0 A | 5V rail, moderate loads |
 | 2 A | 0.80 | 2.0 A | 12V distribution, motor enable |
-| 3 A | 1.00 | 3.0 A | 24V main rail, induction supply |
+| 3 A | 1.00 | 3.0 A | 24V main rail |
 | 5 A | 1.50 | 5.0 A | High-current motor/actuator feeds |
 
 > [!tip] For currents above 5 A, use copper pours or parallel traces rather than single tracks.
@@ -95,7 +95,7 @@ Based on IPC-2221B external layer, 10°C temperature rise, 1 oz copper.
 
 ## 7. Creepage & Clearance (IEC 60335-1)
 
-These rules apply to the **unified board** where mains-referenced signals exist (relay AC switching, induction module CAN interface).
+These rules apply to the **unified board** where mains-referenced signals exist (relay AC switching, heating unit CAN interface).
 
 | Insulation Type | Min Distance (mm) | Application |
 |----------------|-------------------|-------------|

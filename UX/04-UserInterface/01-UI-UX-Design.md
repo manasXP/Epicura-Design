@@ -1,14 +1,14 @@
 ---
 created: 2026-02-15
 modified: 2026-11-04
-version: 1.2
+version: 1.3
 status: Draft
 ---
 
 # UI/UX Design
 
 > [!warning] Screen layouts pending redesign for 480x320
-> The application processor is now the Rockchip RV1106G3 (Luckfox Pico Zero) and the primary display is a 4" 480x320 SPI LCD rendered by LVGL 9. **All screen layouts in Section 2 were designed for the previous 10" 1280x800 display and are pending redesign for 480x320.** They are kept as design intent only; do not implement them pixel-for-pixel. Their *content* (dispenser positions, temperature source, stir and E-stop semantics) was brought up to the current hardware on 2026-11-04: three dispensers (FID Box1–6 and CID Slot1–5 on one servo block, SLD oil/water with load cells), a commercial induction module that runs its own temperature loop and is the only temperature source, and a CAN servo stirring motor. The platform constraints in Sections 1, 5 and 6 are current. The Vite/React mockups in `epi-Design/UX/mocks` remain design-intent mockups of the companion app, not an implementation of the device UI.
+> The application processor is now the Rockchip RV1106G3 (Luckfox Pico Zero) and the primary display is a 4" 480x320 SPI LCD rendered by LVGL 9. **All screen layouts in Section 2 were designed for the previous 10" 1280x800 display and are pending redesign for 480x320.** They are kept as design intent only; do not implement them pixel-for-pixel. Their *content* (dispenser positions, temperature source, stir and E-stop semantics) was brought up to the current hardware on 2026-11-04: three dispensers (FID Box1–6 and CID Slot1–5 on one servo block, SLD oil/water with load cells), a commercial electric heating unit (rice-cooker class) that runs its own temperature loop and is the only temperature source, and a CAN servo stirring motor. The platform constraints in Sections 1, 5 and 6 are current. The Vite/React mockups in `epi-Design/UX/mocks` remain design-intent mockups of the companion app, not an implementation of the device UI.
 
 ## 1. Display Overview
 
@@ -65,7 +65,7 @@ status: Draft
 - 3-4 quick recipe cards (favorites or suggestions)
 - Recent cooking history
 - "Browse All Recipes" prominent button
-- Bottom status bar: device state, pot detection and surface temperature. Both come from the induction module's HEAT_STATUS frame (pot_detected, surface_temp); Epicura has no temperature sensor of its own
+- Bottom status bar: device state, pot detection and surface temperature. Both come from the heating unit's HEAT_STATUS frame (pot_detected, surface_temp); Epicura has no temperature sensor of its own. A hot-surface warning replaces the temperature readout while surface_temp > 60 °C after heating stops
 
 ---
 
@@ -235,14 +235,15 @@ status: Draft
 **Elements:**
 - Stage counter in header
 - Current stage name and overall progress bar
-- Surface temperature tile: the module-reported surface_temp from HEAT_STATUS (0x180, 10 Hz) against the stage setpoint the `heat` thread is sending (HEAT_SET_TEMP 0x100). The module regulates; the UI only displays. Shown as "Surface", never "Food", since the module measures the pot bottom through the glass
-- Pot / power tile: pot_detected and power_pct from HEAT_STATUS; a missing pot shows "No pot" and the module stops heating on its own
+- Surface temperature tile: the unit-reported surface_temp from HEAT_STATUS (0x180, 10 Hz) against the stage setpoint the `heat` thread is sending (HEAT_SET_TEMP 0x100). The heating unit regulates; the UI only displays. Shown as "Surface", never "Food", since the unit's spring-loaded centre sensor measures the pot bottom
+- Pot / power tile: pot_detected and power_pct from HEAT_STATUS; a missing pot shows "No pot" and the heating unit stops heating on its own
+- Hot-surface warning: the heating plate stores heat and stays hot for several minutes after power-off, pause, E-stop or the end of a recipe. The pot tile and the bottom status bar show a hot-surface warning (icon + "Hot surface") while HEAT_STATUS surface_temp > 60 °C, on every screen including Completion and Paused; it clears on its own below 60 °C
 - Time remaining countdown
 - Stir status indicator: pattern and commanded RPM from the recipe step, measured RPM from the CAN servo's feedback (TELEMETRY 0x310 motor_rpm)
 - CV monitoring status (what it is looking for, current confidence)
 - "View Pot" button opens the on-demand pot preview (§6.3); the cooking screen itself carries no permanent video
 - Pause button (holds current state; the heater is held at reduced power while paused)
-- Emergency Stop button (prominent, red, always accessible). It broadcasts E_STOP (0x001) on the CAN bus, which the STM32 (AC relay open, stir off, dispensers off) and the induction module both act on
+- Emergency Stop button (prominent, red, always accessible). It broadcasts E_STOP (0x001) on the CAN bus, which the STM32 (AC relay open, stir off, dispensers off) and the heating unit both act on
 
 ---
 
@@ -403,7 +404,7 @@ lv_label_set_text_fmt(temp_label, _("Temperature: %d°C"), current_temp);
 
 3. **Transparent Cooking Progress**
    - Pot preview available on demand ("view pot" screen, ≤ 10 fps); the cooking screen shows stage, temperature and timer without a permanent video feed
-   - Real-time surface temperature (reported by the induction module), time, and stir status
+   - Real-time surface temperature (reported by the heating unit), time, and stir status
    - CV confidence indicator (user can see what the system "sees")
    - Stage-by-stage progress with estimated completion
 
@@ -411,7 +412,7 @@ lv_label_set_text_fmt(temp_label, _("Temperature: %d°C"), current_temp);
    - Emergency Stop button visible on every cooking screen
    - Red color, large touch target, no confirmation dialog
    - Clear warning messages for module faults (HEAT_FAULT) and the STM32 WARNING / CRITICAL states
-   - Pot detection (the induction module's own, reported in HEAT_STATUS) prevents cooking without pot
+   - Pot detection (the heating unit's own centre sensor, reported as pot_detected in HEAT_STATUS) prevents cooking without pot
 
 5. **Offline-Capable**
    - All UI assets stored locally
@@ -517,13 +518,14 @@ void pot_preview_stop(ui_ctx_t *ui)
 
 ### 6.4 UI Data Sources
 
-The `ui` thread never touches the CAN bus. It reads the lock-free ring buffer the `can` thread fills with STM32 telemetry and induction-module status, and the engine's state (see [[04-MPU-Functional-Specification|MPU Functional Specification]] §4.4). Commands the UI raises go through the engine onto the can command queue; only the `heat` thread sends heater setpoints.
+The `ui` thread never touches the CAN bus. It reads the lock-free ring buffer the `can` thread fills with STM32 telemetry and heating-unit status, and the engine's state (see [[04-MPU-Functional-Specification|MPU Functional Specification]] §4.4). Commands the UI raises go through the engine onto the can command queue; only the `heat` thread sends heater setpoints.
 
 | UI element | Source | Frame (CAN ID) |
 |------------|--------|----------------|
-| Surface temperature, power %, pot detected | Induction module via `can` thread | HEAT_STATUS (0x180), 10 Hz |
+| Surface temperature, power %, pot detected | Heating unit via `can` thread | HEAT_STATUS (0x180), 10 Hz |
+| Hot-surface warning | Heating unit via `can` thread | HEAT_STATUS surface_temp > 60 °C while power % is 0 (plate cooling after power-off) |
 | Heater setpoint shown as "Set" | `heat` thread | HEAT_SET_TEMP (0x100) / HEAT_SET_POWER (0x103) |
-| Module fault banner | Induction module | HEAT_FAULT (0x181), fault_flags in HEAT_STATUS |
+| Heater fault banner | Heating unit | HEAT_FAULT (0x181), fault_flags in HEAT_STATUS |
 | Stir pattern / commanded RPM | Engine (recipe step) | SET_STIR (0x202) |
 | Measured stir RPM, STM32 safety state, battery flags | STM32 | TELEMETRY (0x310), 20 Hz |
 | STM32 fault / SLD low level | STM32 | STATUS (0x312), on change |
@@ -633,7 +635,7 @@ Epicura uses native mobile development: **SwiftUI** (iOS) and **Jetpack Compose*
 | Oil Level | 5-point discrete slider | 1 (Light) – 5 (Rich) | 3 |
 | Typical Servings | Stepper (spinner) | 1 – 4 | 2 |
 6. **Device Pairing** - BLE scan, WiFi provisioning, cloud account linking
-7. **Device Status** - Firmware versions, connection status, SLD reservoir levels, dispenser and induction-module health
+7. **Device Status** - Firmware versions, connection status, SLD reservoir levels, dispenser and heating-unit health
 
 ### 7.3 Communication
 
@@ -673,3 +675,4 @@ Epicura uses native mobile development: **SwiftUI** (iOS) and **Jetpack Compose*
 | 1.0 | 2026-02-15 | Manas Pradhan | Initial document creation |
 | 1.1 | 2026-11-04 | Manas Pradhan | Application processor changed to RV1106G3 (Luckfox Pico Zero): primary display is a 4" 480x320 SPI LCD with LVGL 9 (software rendering, no GPU); Kivy implementation notes replaced with LVGL; phone live view is on-demand RTSP; Section 2 layouts flagged as pending redesign for 480x320 |
 | 1.2 | 2026-11-04 | Manas Pradhan | Brought screen content up to the actuator topology of epi-Spec commit 137c0e2 and the CAN host bus: three dispensers (FID Box1–6 and CID Slot1–5 on one servo block, SLD oil/water), ingredient loading as tap-to-confirm for FID/CID and live load-cell weight for SLD with DISPENSER_STATUS / PREFLIGHT gating, surface temperature and pot detection sourced from the induction module's HEAT_STATUS (no Epicura temperature sensor), CAN servo stir feedback, E-stop as a CAN E_STOP broadcast, dispenser settings group, new §6.4 UI data-source table. 480x320 redesign still pending. |
+| 1.3 | 2026-11-04 | Manas Pradhan | Heater is now the commercial electric heating unit (rice-cooker class, own PID, CAN port) instead of the induction surface; status bar, pot/surface tiles and §6.4 sources reworded (surface_temp is the unit's centre sensor on the pot bottom). Added the hot-surface warning: the plate stays hot for minutes after power-off, so the UI shows a warning while surface_temp > 60 °C. Same CAN contract |
