@@ -1,16 +1,83 @@
 ---
 created: 2026-03-21
-version: 1.0
-status: Review Complete
-schematic_revision: v1.1 (20-03-2026)
+modified: 2026-11-04
+version: 2.0
+status: Review Complete — dispositioned against design v3.x
+schematic_revision: v1.1 (20-03-2026); dispositions against Unified_v1.3 KiCad and design doc v3.1 (2026-11-04)
 ---
 
 # Schematic Review Report — Unified PCB v1 rev1.1
 
-**Date:** 2026-03-21
-**Schematic:** `docs/09-PCB/Unified_v1/` (4 sheets, KiCad 9.0.4)
+**Date:** 2026-03-21 (review); 2026-11-04 (v3.x disposition)
+**Schematic reviewed:** rev 1.1 of what is now `Unified_v1.3/` (4 sheets, KiCad 9.0.4)
 **Reviewer:** Claude (automated analysis)
 **Scope:** Full electrical review of all 4 schematic sheets (Root, Controller, Driver, Connector)
+
+> [!note] How to read this document
+> §3 to §8 are the original rev 1.1 review and are kept verbatim as the record. The board has since been redesigned on paper as the single-board v3.x (design doc [[01-Unified-PCB-Design]] v3.1: Luckfox Pico Zero slot, Dispenser Servo Block, two CAN ports, 2S battery, STM32G0B1), and the KiCad project already carries the feedback-divider fixes and the G0B1 swap. §0 below gives the current status of every finding so the next schematic pass starts from a clean list.
+
+---
+
+## 0. Disposition against v3.x (2026-11-04)
+
+Status key: **Fixed** = corrected in `Unified_v1.3/` (commit `6630e48` or later); **Resolved by design** = the v3.x design doc specifies the fix, to be drawn in the next KiCad pass; **Superseded** = the circuit no longer exists in v3.x; **Open** = still to do in the v3.x schematic or layout; **Accepted** = no change needed.
+
+### 0.1 Critical
+
+| ID | Finding (rev 1.1) | Status | v3.x note |
+|----|-------------------|--------|-----------|
+| C-01 | MP1584EN #2 feedback gave 3.8 V, not 6.5 V | **Fixed** | R36 71.5K → 14K; U8 now 6.51 V. The 6.5 V rail is the switched DSB servo rail in v3.x (§4.3 of the design doc) |
+| C-02 | MT3608 boost could put 6.7 V on the 5 V bus | **Superseded** | MT3608, DW01A, FS8205A and TP4056 leave the board; the 2S pack feeds the TPS54531 through the VSYS diode-OR (design doc §4.4, §4.6). Delete the micro-UPS block in the next pass |
+| C-03 | PCF8574AT addresses 0x38/0x39 vs firmware 0x20/0x21 | **Fixed** (value) / verify BOM | Both expander instances now carry Value `PCF8574T` on the `PCF8574AT` library symbol. v3.x keeps only PCF8574 #2 at 0x21 (P-ASD expander #1 removed); confirm the MPN in `BoM/` is the non-A part |
+| C-04 | C34 470 µF rated 25 V on the 24 V rail | **Fixed** | C34 is now `470uF@35V` |
+| C-05 | TPS54531 output unverified (6.5 V by calculation) | **Fixed** | R26 37.4K → 52.3K; U5 now 4.98 V. In v3.x U5 is fed from VSYS (24 V or battery), not from a 12 V UPS input |
+
+### 0.2 High
+
+| ID | Finding (rev 1.1) | Status | v3.x note |
+|----|-------------------|--------|-----------|
+| H-01 | Root label `PB6_FAN1_PWM` for a PA6 signal | **Fixed** | Root sheet reads `PA6_FAN1_PWM` |
+| H-02 | AMS1117 dropout on battery-only 5 V | **Resolved by design** | 5V_MERGED is always the TPS54531 output (VSYS from 24 V or the 2S pack), so the LDO sees ≥ 4.9 V; the MT3608 path that could droop is gone |
+| H-03 | INA219 10 mΩ shunt, poor resolution at 2–5 A | **Accepted** (firmware) | v3.1 keeps 10 mΩ (design doc §8); the 24 V peak is now 3 A, so run the INA219 at PGA ÷1 (±40 mV, 4 A full scale, 10 µV LSB). No hardware change; the shunt also serves the DSB stall window |
+| H-04 | No common-mode choke on CAN at the connector | **Fixed** (heater bus) | A `Common_Mode_Choke_Epicura` part is placed on the Connector sheet for the isolated bus. The v3.x regular stir-motor bus (SN65HVD230, J_CAN_STIR) is short and internal; no choke planned |
+| H-05 | No bypass near J_SLD1 3.3 V (HX711 supply) | **Open** (layout) | J_SLD and the external HX711 boards remain in v3.x (design doc §6.4); add 100 nF at the connector pin during layout |
+| H-06 | TP4056 TEMP pin bypassed with a fixed 100K | **Superseded** | TP4056 is replaced by a TP5100 with a real 10 kΩ NTC on J_BAT pin 3 (design doc §4.6.2); the interim R92 fix becomes moot once the block is deleted |
+| H-07 | J_PASD1 12 V pin at the DF11 3 A limit | **Superseded** | P-ASD pneumatics removed; each DSB servo has its own J_DSB header on the PTC-protected 6.5 V rail |
+| H-08 | Schematic PC8 vs design doc PC5 for SLD water PWM | **Open** (pin map) | Reconcile in the G0B1 pin map: the architecture doc still lists the pumps on PC3–PC6 while the schematic uses PC8; pick the timer-capable pin on the G0 and update both |
+
+### 0.3 Moderate
+
+| ID | Finding (rev 1.1) | Status | v3.x note |
+|----|-------------------|--------|-----------|
+| M-01 | HSE load capacitors vs crystal CL | **Open** (verify) | 8 MHz HSE stays on the G0B1 (PF0/PF1); check Y1's CL and C11/C12 before fabrication |
+| M-02 | CAN 120 Ω possible double termination | **Resolved by design** | Design doc §7: isolated bus terminated at J_CAN_HEAT plus 120 Ω inside the module (both on-board nodes are a short stub); stir bus terminated at J_CAN_STIR plus the motor. Confirm the module's and motor's built-in terminations |
+| M-03 | BOOT0 pull-down not visible | **Resolved by design** | SW_BOOT to 3.3 V with 10k pull-down, plus R_AP_BOOT (1k) from J_AP GPIO 32. On the G0B1 BOOT0 is PA14 (shared with SWCLK) and needs nBOOT_SEL cleared in option bytes; the swapped U3 carries that note |
+| M-04 | No series resistor on PB3 IRQ to the CM5 | **Superseded** | CM5 and J_CM5 removed; the host link is UART2 on J_AP (service/bootloader only) |
+| M-05 | TB6612 STBY must be pulled high | **Resolved by design** | Design doc §6.2: STBY ← 3.3 V via 10k; the net exists on the Driver sheet |
+| M-06 | DRV8876 PMODE mode select | **Superseded** | DRV8876 removed with the CID linear actuator; delete U11 in the next pass |
+| M-07 | R37 dissipation at fault current | **Accepted** | 3 A peak on the 24 V rail (§4.11); F1 5 A PTC upstream |
+| M-08 | J_CID1 stepper 24 V pin at 3 A | **Superseded** | No stepper; the 24 V CAN stir motor gets its own XT30 (J_STIR_PWR) |
+| M-09 | No RC snubbers on inductive loads | **Accepted** (prototype) | Still applies to the SLD solenoids and pumps; add snubbers only if EMC testing requires |
+| M-10 | No polyfuse on 5 V to the CM5 | **Open** | Now the Pico Zero on J_AP (0.5 A peak). Add a 1.5 A PTC on the J_AP 5 V pins so a Pico Zero fault cannot drop the STM32 |
+| M-11 | WS2812B data at 3.3 V below the 5 V threshold | **Resolved by design** | Ring driven from STM32 PB14 through a 74AHCT1G125 level shifter and 33 R (design doc §6.6) |
+| M-12 | I2C bus capacitance with 5 devices | **Accepted** (improved) | v3.x I2C1 has three on-board devices only (PCA9685 0x41, PCF8574 #2 0x21, INA219 0x40); the external MLX90614 and ADS1015 are gone, so bus capacitance drops to roughly 50 pF |
+
+### 0.4 Sections superseded by the v3.x design
+
+- **§5 pin allocation audit** describes the STM32G474RE map. The board is now the STM32G0B1RET6 (design doc §3): I2C1_SCL on PB6, VBUS sense PA0, battery sense PA4, buzzer PA8/TIM1_CH1, BOOT0 on PA14, FDCAN1 on PB8/PB9 and FDCAN2 on PB12/PB13; the SPI2 CM5 bridge, BLDC PWM/EN/DIR, CID actuator and P-ASD pins are retired.
+- **§6 power budget** assumed a stepper and a BLDC on 24 V plus a 12 V UPS. The v3.1 budget (design doc §4.11) is 2.1 A typical / 3.0 A peak on the LRS-75-24 with the CAN stir motor and the DSB serialised in firmware; LRS-100-24 is the fallback if the measured peak exceeds 3 A. The 12 V rail carries fans, pumps, solenoids and the TP5100 charger (1.4 / 3.0 A); 5 V carries the Pico Zero, LCD, LDO, B0505S and LED ring (0.7 / 2.2 A).
+- **§4 design strengths**: the 12 V input protection chain, the TP4056/DW01A/FS8205A battery chain and the XT30 12 V input no longer exist; the 24 V input chain, USB, CAN isolation and signal-protection points still hold.
+- **§8 recommended changes for rev 1.2**: items 1–4, 6 and 7 are done or superseded as tabled above; item 5 (level shifter) and 9 (documentation) are specified in v3.x; item 8 (PSU) is the LRS-100-24 fallback.
+
+### 0.5 Carried into the v3.x schematic pass
+
+1. Delete the superseded blocks: MT3608/DW01A/FS8205A/TP4056 micro-UPS, J_12V_UPS, DRV8876 (U11), PCF8574 #1 (U9), J_PASD, J_CID, J_PRES, J_BLDC, J_IR_LED, J_CM5.
+2. Draw the v3.x blocks: J_AP slot and J_LCD, MCP2518FD + ISO1050DUB #2 for the RV1106 CAN node, PCA9685 + Q_DSB + J_DSB1-4 + D_DSB4, SN65HVD230 + J_CAN_STIR + Q_STIR + J_STIR_PWR, TP5100 + J_BAT + VSYS diode-OR, 74AHCT1G125 on J_LED.
+3. Close the open items: H-05 (J_SLD 3.3 V bypass), H-08 (SLD PWM pins on the G0 map), M-01 (crystal CL), M-10 (J_AP 5 V PTC).
+4. Confirm the PCF8574 MPN in the BOM (C-03) and the module/motor CAN terminations (M-02).
+5. Re-run ERC and a fresh review once the above is drawn; this document then retires in favour of a v3.x review.
+
+---
 
 ---
 
@@ -670,4 +737,11 @@ Based on this review, the following changes are recommended for the next revisio
 
 ---
 
-*Report generated 2026-03-21. Review based on schematic PDF rev1.1 (20-03-2026), BOM export (20-03-2026), and KiCad source files.*
+*Report generated 2026-03-21. Review based on schematic PDF rev1.1 (20-03-2026), BOM export (20-03-2026), and KiCad source files. §0 added 2026-11-04 against `Unified_v1.3/` and design doc v3.1.*
+
+## 9. Revision History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 2.0 | 2026-11-04 | Manas Pradhan | Added §0: every finding dispositioned against the Unified_v1.3 KiCad state (C-01, C-04, C-05, H-01, H-04 fixed; C-03 value corrected) and the v3.x design (C-02, H-06, H-07, M-04, M-06, M-08 superseded; H-02, M-02, M-03, M-05, M-11 resolved by design); open list and v3.x schematic-pass checklist; §5/§6 marked as superseded by the G0B1 pin map and the v3.1 power budget; original review kept verbatim |
+| 1.0 | 2026-03-21 | Claude (automated) | Initial review of schematic rev 1.1: 5 critical, 8 high, 12 moderate findings |
