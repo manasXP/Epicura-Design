@@ -41,11 +41,10 @@ PCB/
 
 ## Status: schematic lags the design document
 
-`01-Unified-PCB-Design.md` v3.1 is the target for the next schematic revision. The KiCad project in `Unified_v1.3/` still reflects the v2.x design (CM5 stack, P-ASD pneumatics, single-cell battery) with one exception: U3 on `Controller.kicad_sch` is already the STM32G0B1RETx with the G0 pin map (I2C1_SCL PB6, FDCAN1 PB8/PB9, VBUS PA0, battery PA4, buzzer PA8, BOOT0 on PA14), with the retired v2.x pump/motor lines parked on PA15/PD0/PD1.
+`01-Unified-PCB-Design.md` v3.1 is the target for the next schematic revision. The KiCad project in `Unified_v1.3/` still reflects the v2.x design (P-ASD pneumatics, single-cell battery, PWM stirring motor) with two exceptions: U3 on `Controller.kicad_sch` is already the STM32G0B1RETx with the G0 pin map (I2C1_SCL PB6, FDCAN1 PB8/PB9, VBUS PA0, battery PA4, buzzer PA8, BOOT0 on PA14, USART2 PA2/PA3 service link), with the retired v2.x pump/motor lines parked on PA15/PD0/PD1; and the RV1106 side is in place (2026-11-04): J_AP1 and J_LCD1 with the BOOT0/NRST series resistors and touch pull-ups on `Connector.kicad_sch` (replacing J_CM5), and the RV1106 CAN node (U_CAN1 MCP2518FD, Y3 40 MHz, U_ISO2 ISO1050DUB #2 on the isolated bus with U6) on `Driver.kicad_sch`. J_AP header pins for SPI0_CS1, nINT, TP_RST, BOOT0 and NRST (11/13/15/31/33) are provisional until layout.
 
 Still to do in KiCad for v3.x:
 
-- J_AP slot and J_LCD break-out, MCP2518FD + second ISO1050DUB for the RV1106 CAN node
 - Dispenser Servo Block (PCA9685, Q_DSB rail switch, J_DSB1-4, D_DSB4) replacing the P-ASD and CID actuator drivers
 - Regular CAN port (SN65HVD230, J_CAN_STIR) and Q_STIR / J_STIR_PWR replacing the PWM/EN/DIR motor lines
 - 2S battery path (J_BAT, TP5100, VSYS diode-OR) replacing the 12 V UPS input and the single-cell micro-UPS

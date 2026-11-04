@@ -5911,7 +5911,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint_Small")
-		(at 257.81 58.42 0)
+		(at 273.05 58.42 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5919,7 +5919,7 @@
 		(dnp no)
 		(uuid "83d35e8a-3613-48be-ad37-f35fde4c1d07")
 		(property "Reference" "TP1"
-			(at 259.334 57.912 0)
+			(at 274.574 57.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5928,7 +5928,7 @@
 			)
 		)
 		(property "Value" "PA2"
-			(at 264.668 58.166 0)
+			(at 279.908 58.166 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5937,7 +5937,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Loop_D1.80mm_Drill1.0mm_Beaded"
-			(at 262.89 58.42 0)
+			(at 278.13 58.42 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5946,7 +5946,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 262.89 58.42 0)
+			(at 278.13 58.42 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5955,7 +5955,7 @@
 			)
 		)
 		(property "Description" "test point"
-			(at 257.81 58.42 0)
+			(at 273.05 58.42 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8189,21 +8189,7 @@
 			(justify left)
 		)
 		(uuid "a99a9739-071a-49e5-a1df-b9ba325b904a")
-	)
-	(wire
-		(pts
-			(xy 248.92 58.42) (xy 257.81 58.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "8a9f1a28-2c1e-4a09-9d03-1ed1fe593f8c")
-	)
-	(no_connect
-		(at 248.92 60.96)
-		(uuid "31a3c5fb-5f00-4802-9829-0ad37aaa893b")
-	)
+	)
 	(wire
 		(pts
 			(xy 248.92 63.5) (xy 257.81 63.5)
@@ -9594,5 +9580,47 @@
 			(justify left bottom)
 		)
 		(uuid "59e3eaf3-678d-4cca-aca5-781e85174816")
+	)
+	(wire
+		(pts
+			(xy 248.92 58.42) (xy 273.05 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "09a3594d-de71-4568-8965-ffaaced449a3")
+	)
+	(hierarchical_label "PA2_USART2_TX"
+		(shape input)
+		(at 257.81 58.42 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "bba0c623-df8f-448e-8303-19f6a396499d")
+	)
+	(wire
+		(pts
+			(xy 248.92 60.96) (xy 257.81 60.96)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ccdb8930-f1b3-4453-bf72-7632aaa4e8ce")
+	)
+	(hierarchical_label "PA3_USART2_RX"
+		(shape input)
+		(at 257.81 60.96 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "cfd0765a-95c8-4fbd-8dd6-6dcf9cac4104")
 	)
 )
