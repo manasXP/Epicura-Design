@@ -1,0 +1,251 @@
+(footprint "CON4_2X2_RF_DF11_HIR"
+	(version 20241229)
+	(generator "pcbnew")
+	(generator_version "9.0")
+	(layer "F.Cu")
+	(tags "DF11-4DP-2DS52 ")
+	(property "Reference" "REF**"
+		(at -1 -1 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "CON4_2X2_RF_DF11_HIR"
+		(at -1 -1 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" "~"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" "Generic connector, double row, 02x02, odd/even pin numbering scheme (row 1 odd numbers, row 2 even numbers), script generated (kicad-library-utils/schlib/autogen/connector/)"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property ki_fp_filters "Connector*:*_2x??_*")
+	(path "/a2176d0d-9e58-4996-8395-4fbd65a2c0c6/24803dfe-d883-4861-96b1-dbb1e34a6821")
+	(sheetname "/Connector/")
+	(sheetfile "Connector.kicad_sch")
+	(attr through_hole)
+	(fp_line
+		(start -4.1242 -9.8392)
+		(end -4.1242 0.4224)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -4.1242 0.4224)
+		(end -2.940763 0.4224)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 0.940763 0.4224)
+		(end 2.1242 0.4224)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 2.1242 -9.8392)
+		(end -4.1242 -9.8392)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 2.1242 0.4224)
+		(end 2.1242 -9.8392)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_circle
+		(center 0 1.905)
+		(end 0.381 1.905)
+		(stroke
+			(width 0.508)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+	)
+	(fp_circle
+		(center 0 1.905)
+		(end 0.381 1.905)
+		(stroke
+			(width 0.508)
+			(type solid)
+		)
+		(fill no)
+		(layer "B.SilkS")
+	)
+	(fp_line
+		(start -4.2512 -9.9662)
+		(end -4.2512 0.9525)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -4.2512 0.9525)
+		(end 2.2512 0.9525)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 2.2512 -9.9662)
+		(end -4.2512 -9.9662)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 2.2512 0.9525)
+		(end 2.2512 -9.9662)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -3.9972 -9.7122)
+		(end -3.9972 0.2954)
+		(stroke
+			(width 0.0254)
+			(type solid)
+		)
+		(layer "F.Fab")
+	)
+	(fp_line
+		(start -3.9972 0.2954)
+		(end 1.9972 0.2954)
+		(stroke
+			(width 0.0254)
+			(type solid)
+		)
+		(layer "F.Fab")
+	)
+	(fp_line
+		(start 1.9972 -9.7122)
+		(end -3.9972 -9.7122)
+		(stroke
+			(width 0.0254)
+			(type solid)
+		)
+		(layer "F.Fab")
+	)
+	(fp_line
+		(start 1.9972 0.2954)
+		(end 1.9972 -9.7122)
+		(stroke
+			(width 0.0254)
+			(type solid)
+		)
+		(layer "F.Fab")
+	)
+	(fp_circle
+		(center 0 1.905)
+		(end 0.381 1.905)
+		(stroke
+			(width 0.508)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+	)
+	(fp_text user "${REFERENCE}"
+		(at -1 -1 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" thru_hole circle
+		(at 0 0)
+		(size 1.397 1.397)
+		(drill 0.8128)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "Pin_1")
+		(pintype "passive")
+	)
+	(pad "2" thru_hole circle
+		(at 0 -2.000001)
+		(size 1.397 1.397)
+		(drill 0.8128)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "Pin_2")
+		(pintype "passive")
+	)
+	(pad "3" thru_hole circle
+		(at -2.000001 0)
+		(size 1.397 1.397)
+		(drill 0.8128)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "Pin_3")
+		(pintype "passive")
+	)
+	(pad "4" thru_hole circle
+		(at -2.000001 -2.000001)
+		(size 1.397 1.397)
+		(drill 0.8128)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "Pin_4")
+		(pintype "passive")
+	)
+	(embedded_fonts no)
+)

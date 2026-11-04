@@ -1,0 +1,342 @@
+(footprint "IND_DR331-513AEE_BRN"
+	(version 20241229)
+	(generator "pcbnew")
+	(generator_version "9.0")
+	(layer "F.Cu")
+	(tags "DR331-513AEE ")
+	(property "Reference" "REF**"
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "IND_DR331-513AEE_BRN"
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" "DR331-513AEE"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property ki_fp_filters "IND_DR331-513AEE_BRN IND_DR331-513AEE_BRN-M IND_DR331-513AEE_BRN-L")
+	(path "/a2176d0d-9e58-4996-8395-4fbd65a2c0c6/d2946669-3fe1-4479-a80c-9f627e52986e")
+	(sheetname "/Connector/")
+	(sheetfile "Connector.kicad_sch")
+	(attr smd)
+	(fp_line
+		(start -3.7719 -2.9337)
+		(end -3.7719 -1.83134)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -3.7719 -0.70866)
+		(end -3.7719 0.70866)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -3.7719 1.83134)
+		(end -3.7719 2.9337)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -3.7719 2.9337)
+		(end 3.7719 2.9337)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 3.7719 -2.9337)
+		(end -3.7719 -2.9337)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 3.7719 -1.83134)
+		(end 3.7719 -2.9337)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 3.7719 0.70866)
+		(end 3.7719 -0.70866)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 3.7719 2.9337)
+		(end 3.7719 1.83134)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_circle
+		(center -7.5438 -1.27)
+		(end -7.4422 -1.27)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -5.207 -1.7526)
+		(end -3.8989 -1.7526)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -5.207 1.7526)
+		(end -5.207 -1.7526)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -5.207 1.7526)
+		(end -3.8989 1.7526)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -3.8989 -3.0607)
+		(end 3.8989 -3.0607)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -3.8989 -1.7526)
+		(end -3.8989 -3.0607)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -3.8989 3.0607)
+		(end -3.8989 1.7526)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 3.8989 -3.0607)
+		(end 3.8989 -1.7526)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 3.8989 1.7526)
+		(end 3.8989 3.0607)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 3.8989 3.0607)
+		(end -3.8989 3.0607)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 5.207 -1.7526)
+		(end 3.8989 -1.7526)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 5.207 -1.7526)
+		(end 5.207 1.7526)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 5.207 1.7526)
+		(end 3.8989 1.7526)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -3.6449 -2.8067)
+		(end -3.6449 2.8067)
+		(stroke
+			(width 0.0254)
+			(type solid)
+		)
+		(layer "F.Fab")
+	)
+	(fp_line
+		(start -3.6449 2.8067)
+		(end 3.6449 2.8067)
+		(stroke
+			(width 0.0254)
+			(type solid)
+		)
+		(layer "F.Fab")
+	)
+	(fp_line
+		(start 3.6449 -2.8067)
+		(end -3.6449 -2.8067)
+		(stroke
+			(width 0.0254)
+			(type solid)
+		)
+		(layer "F.Fab")
+	)
+	(fp_line
+		(start 3.6449 2.8067)
+		(end 3.6449 -2.8067)
+		(stroke
+			(width 0.0254)
+			(type solid)
+		)
+		(layer "F.Fab")
+	)
+	(fp_arc
+		(start 0.3048 -2.8067)
+		(mid 0 -2.5019)
+		(end -0.3048 -2.8067)
+		(stroke
+			(width 0.0254)
+			(type solid)
+		)
+		(layer "F.Fab")
+	)
+	(fp_circle
+		(center -2.8956 -1.27)
+		(end -2.8194 -1.27)
+		(stroke
+			(width 0.0254)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" smd rect
+		(at -3.9243 -1.27)
+		(size 2.0574 0.4572)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(pinfunction "1")
+		(pintype "unspecified")
+	)
+	(pad "2" smd rect
+		(at -3.9243 1.27)
+		(size 2.0574 0.4572)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(pinfunction "2")
+		(pintype "unspecified")
+	)
+	(pad "3" smd rect
+		(at 3.9243 1.27)
+		(size 2.0574 0.4572)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(pinfunction "3")
+		(pintype "unspecified")
+	)
+	(pad "4" smd rect
+		(at 3.9243 -1.27)
+		(size 2.0574 0.4572)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(pinfunction "4")
+		(pintype "unspecified")
+	)
+	(embedded_fonts no)
+)

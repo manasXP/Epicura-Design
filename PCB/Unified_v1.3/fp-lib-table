@@ -1,0 +1,6 @@
+(fp_lib_table
+  (lib (name "CONNECTOR_EPICURA")(type "KiCad")(uri "${KIPRJMOD}/libraries/CONNECTOR_EPICURA.pretty")(options "")(descr ""))
+  (lib (name "Driver_Epicura_Footprints")(type "KiCad")(uri "${KIPRJMOD}/libraries/Driver_Epicura_Footprints.pretty")(options "")(descr ""))
+  (lib (name "Common_Mode_Choke_Epicura")(type "KiCad")(uri "${KIPRJMOD}/libraries/Common_Mode_Choke_Epicura.pretty")(options "")(descr ""))
+  (lib (name "Epicura_Capacitor")(type "KiCad")(uri "${KIPRJMOD}/libraries/Epicura_Capacitor.pretty")(options "")(descr ""))
+)

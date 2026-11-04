@@ -1,0 +1,5 @@
+(sym_lib_table
+  (lib (name "CONNECTOR_EPICURA")(type "KiCad")(uri "${KIPRJMOD}/libraries/CONNECTOR_EPICURA.kicad_sym")(options "")(descr ""))
+  (lib (name "Common_Mode_Choke_Epicura")(type "KiCad")(uri "${KIPRJMOD}/libraries/Common_Mode_Choke_Epicura.kicad_sym")(options "")(descr ""))
+  (lib (name "Drivers_Epicura_schematics")(type "KiCad")(uri "${KIPRJMOD}/libraries/Drivers_Epicura_schematics.kicad_sym")(options "")(descr ""))
+)
