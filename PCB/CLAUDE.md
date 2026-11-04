@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Epicura is a kitchen appliance with a custom 4-layer PCB (160x90mm) designed in KiCad 9. The **Unified PCB** is the single board of the system: it carries the STM32G474RE, a slot (J_AP, 2x20 socket + standoffs) for the Luckfox Pico Zero application processor, the CID/FID/SLD dispenser drivers, two CAN ports (isolated J_CAN_HEAT to the cooking surface, regular J_CAN_STIR to the stirring motor) and a 2-cell Li-ion backup with on-board charger.
+Epicura is a kitchen appliance with a custom 4-layer PCB (160x90mm) designed in KiCad 9. The **Unified PCB** is the single board of the system: it carries the STM32G0B1RE, a slot (J_AP, 2x20 socket + standoffs) for the Luckfox Pico Zero application processor, the CID/FID/SLD dispenser drivers, two CAN ports (isolated J_CAN_HEAT to the cooking surface, regular J_CAN_STIR to the stirring motor) and a 2-cell Li-ion backup with on-board charger.
 
-Key hardware: STM32G474RE MCU, MP1584EN buck converters (24V→12V, 24V→6.5V), TPS54531 (VSYS 24V/battery→5V), AMS1117-3.3 LDO, 2x ISO1050DUB isolated CAN transceivers + B0505S (heater bus, STM32 FDCAN1 + RV1106 MCP2518FD), SN65HVD230 CAN transceiver (stir motor bus, FDCAN2), PCA9685 servo driver (Dispenser Servo Block), TB6612FNG pump driver, PCF8574 I2C GPIO expander, TP5100 2S Li-ion charger. No IR thermometer: the cooking surface reports its own temperature over CAN.
+Key hardware: STM32G0B1RET6 MCU (Cortex-M0+, 2x FDCAN; replaced the STM32G474RE on 2026-11-04), MP1584EN buck converters (24V→12V, 24V→6.5V), TPS54531 (VSYS 24V/battery→5V), AMS1117-3.3 LDO, 2x ISO1050DUB isolated CAN transceivers + B0505S (heater bus, STM32 FDCAN1 + RV1106 MCP2518FD), SN65HVD230 CAN transceiver (stir motor bus, FDCAN2), PCA9685 servo driver (Dispenser Servo Block), TB6612FNG pump driver, PCF8574 I2C GPIO expander, TP5100 2S Li-ion charger. No IR thermometer: the cooking surface reports its own temperature over CAN.
 
-> The KiCad project in `Unified_v1.3/` still reflects the v2.x design (CM5 stack, P-ASD, single-cell battery). `01-Unified-PCB-Design.md` v3.0 is the target for the next schematic revision.
+> The KiCad project in `Unified_v1.3/` still reflects the v2.x design (CM5 stack, P-ASD, single-cell battery), except that U3 on `Controller.kicad_sch` is already the STM32G0B1RETx with the G0 pin map (I2C1_SCL PB6, FDCAN1 PB8/PB9, VBUS PA0, battery PA4, buzzer PA8, BOOT0 on PA14; retired v2.x pump/motor lines parked on PA15/PD0/PD1 until the v3.0 pass). `01-Unified-PCB-Design.md` v3.0 is the target for the next schematic revision; its pin tables still say G474.
 
 ## Repository Structure
 

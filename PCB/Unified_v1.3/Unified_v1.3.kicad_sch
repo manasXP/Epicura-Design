@@ -1827,7 +1827,7 @@
 		)
 		(uuid "0574b221-b8cb-4371-a00b-c57a5a469757")
 	)
-	(label "PA8_BLDC_PWM"
+	(label "PD0_BLDC_PWM"
 		(at 30.48 91.44 180)
 		(effects
 			(font
@@ -1847,7 +1847,7 @@
 		)
 		(uuid "07636f1f-09ee-4ca2-87c4-498160cd4969")
 	)
-	(label "PB9_CID2_EN"
+	(label "PB5_CID2_EN"
 		(at 132.08 106.68 0)
 		(effects
 			(font
@@ -1967,7 +1967,7 @@
 		)
 		(uuid "1e21f1ce-e9fb-4497-8ce2-d87a4f9f6407")
 	)
-	(label "PA0_PUMP_PWM"
+	(label "PA15_PUMP_PWM"
 		(at 30.48 66.04 180)
 		(effects
 			(font
@@ -2247,7 +2247,7 @@
 		)
 		(uuid "4a33de15-8d4e-4112-803c-6fd30829f59f")
 	)
-	(label "PA8_BLDC_PWM"
+	(label "PD0_BLDC_PWM"
 		(at 130.81 160.02 180)
 		(effects
 			(font
@@ -2457,7 +2457,7 @@
 		)
 		(uuid "7031dcde-82d8-4c0a-8e6c-31d994416be4")
 	)
-	(label "PA4_EN"
+	(label "PD1_EN"
 		(at 130.81 157.48 180)
 		(effects
 			(font
@@ -2467,7 +2467,7 @@
 		)
 		(uuid "742b16f1-54bb-4964-ab7d-0a46e4532990")
 	)
-	(label "PA0_PUMP_PWM"
+	(label "PA15_PUMP_PWM"
 		(at 287.02 36.83 180)
 		(effects
 			(font
@@ -2687,7 +2687,7 @@
 		)
 		(uuid "9a936b5d-dfb2-47cd-bbe0-13f0d2e85116")
 	)
-	(label "PC7_BUZZER_PWM"
+	(label "PA8_BUZZER_PWM"
 		(at 30.48 60.96 180)
 		(effects
 			(font
@@ -3137,7 +3137,7 @@
 		)
 		(uuid "e413a537-abd6-44cb-8e2b-374740e254b9")
 	)
-	(label "PA4_EN"
+	(label "PD1_EN"
 		(at 30.48 86.36 180)
 		(effects
 			(font
@@ -3277,7 +3277,7 @@
 		)
 		(uuid "fac5a77d-f09a-48e9-ad78-9c1115fe959b")
 	)
-	(label "PC7_BUZZER_PWM"
+	(label "PA8_BUZZER_PWM"
 		(at 285.75 92.71 180)
 		(effects
 			(font
@@ -3317,7 +3317,7 @@
 		)
 		(uuid "fea3f1fb-a454-4e7d-b2c3-4429dd8a21d2")
 	)
-	(label "PB9_CID2_EN"
+	(label "PB5_CID2_EN"
 		(at 287.02 73.66 180)
 		(effects
 			(font
@@ -3403,6 +3403,26 @@
 				)
 			)
 		)
+	)
+	(wire
+		(pts
+			(xy 30.48 71.12) (xy 38.1 71.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f48f8d31-96d8-49e7-af3b-5ae40b6820a8")
+	)
+	(label "BAT+"
+		(at 30.48 71.12 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "b9ceb74a-9902-4645-b106-05009cdf7dca")
 	)
 	(sheet
 		(at 38.1 20.32)
@@ -3508,7 +3528,17 @@
 				(justify left)
 			)
 		)
-		(pin "PA0_PUMP_PWM" input
+		(pin "BAT+" input
+			(at 38.1 71.12 180)
+			(uuid "59fe6936-7ea3-4c11-8158-ff6f5081d3ae")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "PA15_PUMP_PWM" input
 			(at 38.1 66.04 180)
 			(uuid "979e581e-03b7-4e55-a57e-431c336d4f82")
 			(effects
@@ -3528,7 +3558,7 @@
 				(justify right)
 			)
 		)
-		(pin "PA3_ADC_BUS_Detection" input
+		(pin "PA0_VBUS_Detection" input
 			(at 121.92 35.56 0)
 			(uuid "103084db-2749-403e-b511-432f2aa045e4")
 			(effects
@@ -3538,7 +3568,7 @@
 				(justify right)
 			)
 		)
-		(pin "PA4_MOT_EN" input
+		(pin "PD1_MOT_EN" input
 			(at 38.1 86.36 180)
 			(uuid "72442983-ce77-4753-8923-fddae219c5cc")
 			(effects
@@ -3568,7 +3598,7 @@
 				(justify left)
 			)
 		)
-		(pin "PA8_MOT_PWM" input
+		(pin "PD0_MOT_PWM" input
 			(at 38.1 91.44 180)
 			(uuid "4657d7fe-299e-4ab1-b4f4-4e0066767239")
 			(effects
@@ -3628,7 +3658,7 @@
 				(justify right)
 			)
 		)
-		(pin "PA15_I2C1_SCL" input
+		(pin "PB6_I2C1_SCL" input
 			(at 121.92 76.2 0)
 			(uuid "68edf553-2d90-4a26-ae14-7e9bf704bca6")
 			(effects
@@ -3738,7 +3768,7 @@
 				(justify left)
 			)
 		)
-		(pin "PC7_BUZZER_PWM" input
+		(pin "PA8_BUZZER_PWM" input
 			(at 38.1 60.96 180)
 			(uuid "f5578040-a63b-49f2-b7c6-f70c32a5ecfb")
 			(effects
@@ -3808,7 +3838,7 @@
 				(justify right)
 			)
 		)
-		(pin "PB5_MW_FDCAN1_RX" input
+		(pin "PB8_MW_FDCAN1_RX" input
 			(at 121.92 124.46 0)
 			(uuid "35eaf051-7fbe-41d0-aab9-b8f0b3f9429f")
 			(effects
@@ -3818,7 +3848,7 @@
 				(justify right)
 			)
 		)
-		(pin "PB6_MW_FDCAN1_TX" input
+		(pin "PB9_MW_FDCAN1_TX" input
 			(at 121.92 127 0)
 			(uuid "3f23941d-df7b-492a-83d8-e88d420088bf")
 			(effects
@@ -3828,7 +3858,7 @@
 				(justify right)
 			)
 		)
-		(pin "PB9_CID2_Actuator_EN" input
+		(pin "PB5_CID2_Actuator_EN" input
 			(at 121.92 106.68 0)
 			(uuid "76b4671b-24ad-4bee-9a96-f17f2d80d5d8")
 			(effects
