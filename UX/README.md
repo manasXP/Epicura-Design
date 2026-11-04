@@ -1,11 +1,11 @@
-# epi-UX (User Interface & Experience)
+# epi-Design/UX (User Interface & Experience)
 
-UI/UX design documentation and interactive mockups for the [Epicura](../README.md) autonomous kitchen robot.
+UI/UX design documentation and interactive mockups for the [Epicura](../../README.md) autonomous kitchen robot.
 
 ## Structure
 
 ```
-epi-UX/
+epi-Design/UX/
 ├── __init.md                    Workspace index
 ├── 04-UserInterface/
 │   └── 01-UI-UX-Design.md      Touchscreen wireframes, companion app flows, multi-language support

@@ -3,7 +3,7 @@ created: 2026-04-07
 tags: [epicura, ui, ux, design]
 ---
 
-# epi-UX (User Interface & Experience)
+# epi-Design/UX (User Interface & Experience)
 
 UI/UX design documentation for the [[__Workspaces/Appliance/Epicura/epi-Spec/__init|Epicura]] autonomous kitchen robot.
 
