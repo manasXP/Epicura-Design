@@ -1,11 +1,11 @@
-# Epicura-UX (User Interface & Experience)
+# epi-UX (User Interface & Experience)
 
 UI/UX design documentation and interactive mockups for the [Epicura](../README.md) autonomous kitchen robot.
 
 ## Structure
 
 ```
-Epicura-UX/
+epi-UX/
 ├── __init.md                    Workspace index
 ├── 04-UserInterface/
 │   └── 01-UI-UX-Design.md      Touchscreen wireframes, companion app flows, multi-language support
@@ -48,7 +48,9 @@ npm run preview   # Preview production build
 
 The mockups cover the mobile companion app screens. The full UI/UX specification in `01-UI-UX-Design.md` covers:
 
-- **Touchscreen UI** (10" Kivy) — Recipe browsing, cooking progress, camera feed, settings
+- **Touchscreen UI** (4" 480x320 SPI LCD, LVGL 9) — Recipe browsing, ingredient loading (FID boxes, CID slots, SLD reservoirs), cooking progress with module-reported surface temperature, on-demand pot preview, settings
 - **iOS companion app** (SwiftUI) — BLE pairing, recipe management, live cooking, notifications
 - **Android companion app** (Kotlin/Compose) — Mirrors iOS with platform-native patterns
 - **Multi-language support** — English, Hindi, regional languages
+
+> **Note (2026-11-04):** The device moved from a 10" 1280x800 display (Kivy) to a 4" 480x320 SPI LCD rendered by LVGL 9 (software rendering, no GPU). The touchscreen layouts in `01-UI-UX-Design.md` were drawn for 1280x800 and are pending redesign for 480x320. The Vite/React mockups in `mocks/` remain design-intent mockups of the companion app; they are not an implementation of the device UI.
