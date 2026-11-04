@@ -1,7 +1,7 @@
 ---
 created: 2026-03-06
 modified: 2026-11-04
-version: 3.0
+version: 3.1
 status: Draft
 ---
 
@@ -328,7 +328,7 @@ The 5 V buck no longer hangs off this rail (see §4.4), so the 12 V rail carries
 | Parameter | Value |
 |-----------|-------|
 | Output | 6.5 V, 3 A max |
-| Load | Four DS3218-class servos (one moving at a time, ~2.5 A stall) |
+| Load | Four hobby servos, one moving at a time: DS3218 (C1, 2.2 A stall), 2x MG996R (F1, F2, ~2.5 A stall), MG90S (F3, ~0.7 A stall, fed through D_DSB4) |
 | Inductor | 22 µH, CDRH104R, Isat > 4 A |
 | Output caps | 2x 22 µF MLCC + 470 µF electrolytic (10 V, low ESR) |
 | Feedback | 71.5k / 10k → 6.52 V |
@@ -573,22 +573,22 @@ USART2 (PA2/PA3) ↔ UART2 (J_AP 8/10) at 3.3 V carries only the ST system-bootl
 ```
 I2C1 (PA15/PB7) ──► PCA9685PW (addr 0x41, A0 = 1)
    PB4 ──► OE (active-low; 10k pull-up → outputs off until the STM32 drives it low)
-   CH0 ──► 100R ──► J_DSB1 SIG    C1  CID carousel index servo
-   CH1 ──► 100R ──► J_DSB2 SIG    F1  FID carousel index servo
-   CH2 ──► 100R ──► J_DSB3 SIG    F2  FID dose servo (¼ tsp measure wheel)
-   CH3 ──► 100R ──► J_DSB4 SIG    F3  FID steam-gate servo
+   CH0 ──► 100R ──► J_DSB1 SIG    C1  CID carousel index servo   (DS3218 270°)
+   CH1 ──► 100R ──► J_DSB2 SIG    F1  FID carousel index servo   (MG996R)
+   CH2 ──► 100R ──► J_DSB3 SIG    F2  FID dose servo, ¼ tsp wheel (MG996R)
+   CH3 ──► 100R ──► J_DSB4 SIG    F3  FID steam-gate servo       (MG90S)
    CH4–CH15 unused (test pads)
 
-6.5 V (MP1584EN #2) ──► Q_DSB (AO3401, high-side) ──► 3 A PTC ──► 1000 µF ──► J_DSB1-4 V+
-                          gate ◄── 2N7002 ◄── PCF8574 #2 P4 (rail enable)
+6.5 V (MP1584EN #2) ──► Q_DSB (AO3401, high-side) ──► 3 A PTC ──► 1000 µF ──┬── J_DSB1-3 V+ (6.5 V)
+                          gate ◄── 2N7002 ◄── PCF8574 #2 P4 (rail enable)     └── D_DSB4 (M7 / 1N4007, SMA) ──► J_DSB4 V+ (≈ 5.8 V)
 ```
 
 | Parameter | Value |
 |-----------|-------|
 | PWM driver | PCA9685PW (TSSOP-28), 16 ch, 12-bit, 50 Hz; EXTCLK not used; V+ pin left unconnected (servo power goes directly from the switched rail to J_DSB) |
-| Servo signal | 500–2,500 µs, 3.3 V logic (DS3218-class servos accept 3.3 V) |
+| Servo signal | 500–2,500 µs, 3.3 V logic (DS3218, MG996R and MG90S all accept 3.3 V) |
 | Rail | 6.5 V / 3 A, switched on for the duration of a dispense; one servo moves at a time (firmware mutex) |
-| Connectors | J_DSB1–4: 3-pin JR/Futaba servo headers (SIG / V+ / GND), 2.54 mm, keyed, 300 mm extension leads |
+| Connectors | J_DSB1–4: 3-pin JR/Futaba servo headers (SIG / V+ / GND), 2.54 mm, keyed, 300 mm extension leads; J_DSB4 V+ through D_DSB4 (series M7 / 1N4007, ≈ 0.7 V drop) because the MG90S is rated 4.8–6.0 V |
 | Fault detection | INA219 24 V current window during moves + 3 s move timeout + PCA9685 I2C NACK → DSB_STALL |
 | Safe state | OE high and rail off at boot, on E-stop and on heartbeat loss (servos limp) |
 
@@ -803,10 +803,10 @@ Removed since v2: J_CM5 (replaced by J_AP), J_12V_UPS, J_BLDC, J_PASD, J_PRES, J
 | Pin | Signal | Notes |
 |-----|--------|-------|
 | 1 | SIG | PCA9685 CHn via 100R |
-| 2 | V+ | Switched 6.5 V DSB rail |
+| 2 | V+ | Switched 6.5 V DSB rail (J_DSB1–3); J_DSB4 via D_DSB4, ≈ 5.8 V |
 | 3 | GND | Ground |
 
-J_DSB1 = C1 (CID index), J_DSB2 = F1 (FID index), J_DSB3 = F2 (FID dose), J_DSB4 = F3 (FID steam gate).
+J_DSB1 = C1 (CID index, DS3218 270°), J_DSB2 = F1 (FID index, MG996R), J_DSB3 = F2 (FID dose, MG996R), J_DSB4 = F3 (FID steam gate, MG90S).
 
 ### 10.9 J_SLD — SLD Pumps, Solenoids and Load Cells (Hirose DF11-16DP-2DS)
 
@@ -997,6 +997,7 @@ The Pico Zero (~1 W) dissipates through its own board; leave 10 mm of free air a
 | U_PWM | PCA9685PW | TSSOP-28 | 1 | $1.50 | I2C 0x41 |
 | Q_DSB, Q_DSB_N | AO3401 + 2N7002 | SOT-23 | 2 | $0.15 | 6.5 V rail switch |
 | F_DSB, C_DSB | 3 A PTC, 1000 µF 10 V | — | 2 | $0.50 | |
+| D_DSB4 | **M7 (1N4007 SMD)** | SMA | 1 | $0.03 | **Series drop on J_DSB4 V+ for the 6 V MG90S** |
 | J_DSB1-4 | 3-pin servo header | TH | 4 | $0.10 | |
 | **SLD** | | | | | |
 | U_TB | TB6612FNG | SSOP-24 | 1 | $1.50 | |
@@ -1185,6 +1186,7 @@ Compared with v2.0 (~$58): +$2.50 for the second ISO1050 and MCP2518FD, +$1.80 f
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.1 | 2026-11-04 | Manas Pradhan | DSB servos sized per axis (DS3218 270° on C1, MG996R on F1/F2, MG90S on F3; spec dispensing v7.3 / architecture v8.2): D_DSB4 (M7) added in series on the J_DSB4 V+ pin to drop the 6.5 V rail to ≈ 5.8 V for the 6 V-rated MG90S; §4.3 load, §6.1, §10.8 and BOM updated; no other board change |
 | 3.0 | 2026-11-04 | Manas Pradhan | Single-board redesign around the Luckfox Pico Zero: J_AP slot (2x20 socket + standoffs) with SPI0/I2C3 break-out to J_LCD, UART2 service link, BOOT0/NRST control and the RV1106 CAN node (MCP2518FD + ISO1050DUB #2); CID + FID drivers are the Dispenser Servo Block (PCA9685, switched 6.5 V rail, J_DSB1-4) and SLD keeps TB6612/solenoids/HX711 on J_SLD; two CAN ports — isolated J_CAN_HEAT (FDCAN1, 2x ISO1050DUB, B0505S) for the cooking surface and regular J_CAN_STIR (FDCAN2 on PB12/PB13, SN65HVD230, 1 Mbps) plus switched 24 V (Q_STIR, J_STIR_PWR) for a CAN servo stirring motor, replacing PWM/EN/DIR on PA8/PA4/PA5; MLX90614 IR thermometer and J_IR_LED removed (the surface runs its own temperature loop; J_LED carries the ring only); 12 V UPS input and single-cell TP4056/MT3608 micro-UPS replaced by a 2S Li-ion pack (J_BAT 3-pin with NTC) charged by a TP5100 from the 12 V rail, with a VSYS diode-OR (24 V / battery) feeding the TPS54531 so the entire 5 V logic domain rides through outages; battery voltage on PC1, charger status on PCF8574 #2 P6/P7, motor power enable on P5; P-ASD, CID stepper/linear actuator, PCF8574 #1, ADS1015, DRV8876 and their connectors removed; 19 connectors; BOM, thermal, zones and checklists rewritten |
 | 2.0 | 2026-03-18 | Manas Pradhan | Added Mornsun B0505S-1WR3 isolated DC-DC for the ISO1050 bus side; J_CAN pin 4 = 5V_ISO |
 | 1.9 | 2026-03-11 | Manas Pradhan | Added PCF8574 #2 (0x21) for GPIO headroom; SLD solenoids, status LED and LED ring enable moved to it |
