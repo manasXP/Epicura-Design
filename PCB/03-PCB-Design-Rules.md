@@ -1,6 +1,6 @@
 # PCB Design Rules
 
-Design rules reference for the Epicura unified PCB (STM32 controller + power/driver electronics on a single 4-layer board). Rules are enforced via KiCad DRC in the `.kicad_pro` file.
+Design rules reference for the Epicura Unified PCB (STM32G0B1 controller, Luckfox Pico Zero slot, dispenser/liquid drivers, two CAN ports and the 2S battery path on a single 4-layer board). Rules are enforced via KiCad DRC in the `.kicad_pro` file. Net names below are the v3.x targets from [[01-Unified-PCB-Design]]; the v2.x KiCad project in `Unified_v1.3/` still carries some older names until the next schematic pass.
 
 **Related:** [[01-Unified-PCB-Design]]
 
@@ -142,16 +142,16 @@ Absolute manufacturing minimums — our design rules are set above these for mar
 | Net Class | Track (mm) | Clearance (mm) | Via Pad/Drill (mm) | Nets |
 |-----------|-----------|----------------|--------------------:|------|
 | Default | 0.20 | 0.20 | 0.6 / 0.3 | All unassigned signals, GPIO |
-| SPI | 0.25 | 0.20 | 0.6 / 0.3 | `SPI2_*` |
-| I2C | 0.25 | 0.20 | 0.6 / 0.3 | `I2C1_SCL`, `I2C1_SDA` |
-| CAN | 0.25 | 0.20 | 0.6 / 0.3 | `CAN_H`, `CAN_L`, `FDCAN1_*` |
+| SPI | 0.25 | 0.20 | 0.6 / 0.3 | `SPI0_*` from J_AP to the MCP2518FD and to J_LCD (display + touch) |
+| I2C | 0.25 | 0.20 | 0.6 / 0.3 | `I2C1_SCL`, `I2C1_SDA` (PCA9685, PCF8574 #2, INA219) |
+| CAN | 0.25 | 0.20 | 0.6 / 0.3 | Isolated bus: `CANH_HEAT`, `CANL_HEAT`, `FDCAN1_*`, MCP2518FD TX/RX; regular bus: `CANH_STIR`, `CANL_STIR`, `FDCAN2_*`. The two buses never share routing or termination |
 | Power_3V3 | 0.50 | 0.30 | 0.8 / 0.4 | `+3V3`, `VDDA` |
-| Power_5V | 0.50 | 0.30 | 0.8 / 0.4 | `+5V` |
-| Power_12V | 0.80 | 0.30 | 0.8 / 0.4 | `12V_OUT`, `12V_UPS` |
-| Power_24V | 1.00 | 0.30 | 1.0 / 0.5 | `24V_INT`, 24V nets |
+| Power_5V | 0.50 | 0.30 | 0.8 / 0.4 | `+5V` (TPS54531 output: Pico Zero, LCD, STM32, CAN domain, LED ring) |
+| Power_12V | 0.80 | 0.30 | 0.8 / 0.4 | `12V_OUT` (pumps, solenoids, fans, TP5100 charger input) |
+| Power_24V | 1.00 | 0.30 | 1.0 / 0.5 | `24V_INT`, `VSYS`, `BAT+` (diode-OR node and 2S battery path) |
 | Power_GND | 0.50 | 0.30 | 0.8 / 0.4 | `GND` (uses L2 plane primarily) |
 | USB | 0.20 | 0.20 | 0.6 / 0.3 | `USB_DP`, `USB_DM` — 90R differential impedance, length-matched within 0.5mm |
-| HighCurrent | 1.50 | 0.50 | 1.0 / 0.5 | `LACT_O*`, `PUMP_O*`, `SOL*_D`, `FAN*_D` |
+| HighCurrent | 1.50 | 0.50 | 1.0 / 0.5 | `24V_STIR` (switched motor feed), `6V5_DSB` (switched servo rail, up to 2.5 A stall), `PUMP_O*`, `SOL*_D`, `FAN*_D` |
 
 ---
 
@@ -197,5 +197,6 @@ min_text_thickness:        0.08 mm
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.2 | 2026-11-04 | Manas Pradhan | Net classes aligned with design doc v3.x: SPI class is the Pico Zero SPI0 (MCP2518FD, J_LCD) instead of the retired STM32 SPI2 bridge; CAN class covers both the isolated heater bus and the regular stir-motor bus; `12V_UPS` and `LACT_O*` (linear actuator) removed; `VSYS`/`BAT+` added to Power_24V; `24V_STIR` and `6V5_DSB` added to HighCurrent; intro updated for the single-board v3.x scope |
 | 1.1 | 2026-03-09 | Manas Pradhan | Added USB differential pair net class (90R impedance, length-matched) for USB-C programming port |
 | 1.0 | 2026-03-06 | Manas Pradhan | Initial design rules document for unified PCB — stackup, track widths, clearances, via specs, net classes, DRC policy, JLCPCB limits |

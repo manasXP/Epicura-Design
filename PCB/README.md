@@ -81,7 +81,7 @@ FR-4 (Tg ≥ 150 °C), 1.6 mm, ENIG finish. Fabrication target is JLCPCB; its ca
 | USB | 0.20 | 0.20 | 0.6 / 0.3 |
 | HighCurrent | 1.50 | 0.50 | 1.0 / 0.5 |
 
-Full definitions, including net membership, are in `03-PCB-Design-Rules.md` §10. The `LACT_O*` nets listed there belong to the v2.x linear actuator and go away in v3.x.
+Full definitions, including net membership, are in `03-PCB-Design-Rules.md` §10 (v1.2, aligned with the v3.x net names).
 
 ## Working with the project
 
