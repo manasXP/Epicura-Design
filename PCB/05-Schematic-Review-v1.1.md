@@ -1,7 +1,7 @@
 ---
 created: 2026-03-21
-modified: 2026-11-04
-version: 2.0
+modified: 2026-11-05
+version: 2.3
 status: Review Complete — dispositioned against design v3.x
 schematic_revision: v1.1 (20-03-2026); dispositions against Unified_v1.3 KiCad and design doc v3.1 (2026-11-04)
 ---
@@ -743,5 +743,16 @@ Based on this review, the following changes are recommended for the next revisio
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 2.3 | 2026-11-05 | Manas Pradhan | 2026-11-05 addendum extended: the heating-unit tap was withdrawn the same day — CSC v1.6 runs from its own Mean Well LRS-35-12 on J_12V_IN and K_SAFE is back on the unit's AC inlet; findings unchanged |
+| 2.2 | 2026-11-05 | Manas Pradhan | Added the 2026-11-05 addendum: CSC v1.5 board power from the heating unit's 12 V (J_HU_PWR), MP1584EN #1 dropped, J_24V_IN → J_DU_IN (DU feed only), K_SAFE on the element loom; findings unchanged |
+| 2.1 | 2026-11-04 | Manas Pradhan | Added the 2026-11-04 addendum: dispositions that named the SN65HVD230 stir port, Q_STIR / J_STIR_PWR and the J_SU harness are superseded by CSC v1.3 (ISO1050DUB #3 + B0505S #2, K_SU, 24V_SU / GND_SU); findings themselves unchanged |
 | 2.0 | 2026-11-04 | Manas Pradhan | Added §0: every finding dispositioned against the Unified_v1.3 KiCad state (C-01, C-04, C-05, H-01, H-04 fixed; C-03 value corrected) and the v3.x design (C-02, H-06, H-07, M-04, M-06, M-08 superseded; H-02, M-02, M-03, M-05, M-11 resolved by design); open list and v3.x schematic-pass checklist; §5/§6 marked as superseded by the G0B1 pin map and the v3.1 power budget; original review kept verbatim |
 | 1.0 | 2026-03-21 | Claude (automated) | Initial review of schematic rev 1.1: 5 critical, 8 high, 12 moderate findings |
+
+---
+
+> [!note] Addendum 2026-11-04 — superseded by CSC v1.3
+> The dispositions above that refer to the v3.x stir-motor port are out of date since [[02-Cooking-Surface-Controller|Cooking Surface Controller]] v1.3 (both CAN ports isolated, Stirring Unit on its own PSU): the **SN65HVD230** regular port (H-04, M-02, §0 item 2) is now **ISO1050DUB #3 + B0505S #2** (isolated CAN port #2, 5V_ISO2 / GND_SU, second isolation slot); **Q_STIR** / F_STIR and the switched 24 V (M-08, §0 item 2) are replaced by the pilot relay **K_SU** cutting the AC input of a second Mean Well LRS-75-24 (#2) whose floating output enters the CSC on J_SU_IN and leaves on J_STIR_PWR (24V_SU / GND_SU); the **J_SU** harness pinout is now 24V_SU, GND_SU, CAN_H, CAN_L, SHIELD (GND_SU at the CSC end), with nothing referencing the CS ground; the §6 budget note's 2.1 / 3.0 A on one LRS-75-24 becomes ~1.3 / ~2.3 A on LRS-75-24 #1 with the motor on #2. The original findings are kept verbatim.
+
+> [!note] Addendum 2026-11-05 — superseded by CSC v1.5 (board power from the heating unit), revised by CSC v1.6 the same day
+> Since [[02-Cooking-Surface-Controller|Cooking Surface Controller]] v1.5 the CSC, both G5V-2 relay coils and the exhaust fans are powered from **12V_HU**, a 12 V SELV tap off the heating unit's own control-board supply brought in on the new **J_HU_PWR** (F1 2 A, SS34, SMBJ12A, 470 µF); neither LRS-75-24 powers the board. The 24 → 12 V **MP1584EN #1** (§6.2 "12V Rail (from MP1584EN #1)", C-01's sibling buck) is dropped on the CS side — the one remaining MP1584EN makes 5 V from 12 V — and the 24 V input chain **J_24V_IN** becomes **J_DU_IN** (F_DU 3 A, SS54, SMBJ24A → 24V_DU), carrying LRS-75-24 #1 to Q_DOCK and the dock feed only, so the §6.1 24 V budget on LRS #1 falls further to ~0.6 / 1.6 A. The heater safety relay **K_SAFE** is wired on the heating **element** loom (downstream of the OEM board's own element relay), not on the unit's AC inlet, since the OEM board now feeds the CSC. The tap was withdrawn the same day: since CSC v1.6 the CSC, both relay coils and the fans run from a dedicated Mean Well LRS-35-12 on **J_12V_IN** (12V_IN; F1 2 A, SS34, SMBJ12A, 100 µF), nothing is tapped from the heating unit, and K_SAFE is back on the unit's AC inlet loom (J_DU_IN and the MP1584EN #1 removal stand). The original findings are kept verbatim.
